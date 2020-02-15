@@ -33,7 +33,7 @@ int main(void) {
         int r;
         r = kill(childPID, SIGKILL);
         if (r == 0) {
-            printf("Child %d killed", childPID);
+            printf("Child %d killed\n", childPID);
         }
         else {
             perror("Kill failed");
