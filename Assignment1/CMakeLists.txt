@@ -1,19 +1,22 @@
-# cmake_minimum_required(VERSION <specify CMake version here>)
+cmake_minimum_required(VERSION 3.15)
 project(Assignment1)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# add_executable(Assignment1 Problem1/problem1-partI.c)
-# add_executable(Assignment1 Problem1/problem1-partII.c)
-# add_executable(Assignment1 Problem2/problem2-partI.c)
-# add_executable(Assignment1 Problem2/problem2-partII.c)
-# add_executable(Assignment1 Problem3/problem3-partI.c)
-add_executable(Assignment1 Problem3/problem3-partII.c)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+find_package(KernelHeaders REQUIRED)
+include_directories(BEFORE SYSTEM ${KERNELHEADERS_INCLUDE_DIRS})
+add_compile_options(-Wall -Wextra -pedantic -Werror -Wshadow
+        -Wstrict-overflow -fno-strict-aliasing -Wno-missing-field-initializers)
 
-target_link_libraries(Assignment1 rt)
+set(DRIVER_FILE Problem4/problem4-partI.ko)
+set(KBUILD_CMD $(MAKE) -C ${KERNELHEADERS_DIR} modules M=${CMAKE_CURRENT_BINARY_DIR} src=${CMAKE_CURRENT_SOURCE_DIR})
+FILE(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/Kbuild "obj-m := Problem4/problem4-partI.o")
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Problem3/input.txt
-        ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+add_custom_command(OUTPUT ${DRIVER_FILE}
+        COMMAND ${KBUILD_CMD}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS Problem4/problem4-partI.c VERBATIM)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Problem3/words.txt
-        ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+add_custom_target(${PROJECT_NAME} ALL DEPENDS ${DRIVER_FILE})
