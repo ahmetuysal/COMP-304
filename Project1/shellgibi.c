@@ -6,7 +6,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
-const char * sysname = "shellgibi";
+
+const char *sysname = "shellgibi";
+
+void combine_path(char *, char *, char *);
 
 enum return_codes {
     SUCCESS = 0,
@@ -22,190 +25,181 @@ struct command_t {
     char *redirects[3]; // in/out redirection
     struct command_t *next; // for piping
 };
+
 /**
  * Prints a command struct
  * @param struct command_t *
  */
-void print_command(struct command_t * command)
-{
-    int i=0;
+void print_command(struct command_t *command) {
+    int i = 0;
     printf("Command: <%s>\n", command->name);
-    printf("\tIs Background: %s\n", command->background?"yes":"no");
-    printf("\tNeeds Auto-complete: %s\n", command->auto_complete?"yes":"no");
+    printf("\tIs Background: %s\n", command->background ? "yes" : "no");
+    printf("\tNeeds Auto-complete: %s\n", command->auto_complete ? "yes" : "no");
     printf("\tRedirects:\n");
-    for (i=0;i<3;i++)
-        printf("\t\t%d: %s\n", i, command->redirects[i]?command->redirects[i]:"N/A");
+    for (i = 0; i < 3; i++)
+        printf("\t\t%d: %s\n", i, command->redirects[i] ? command->redirects[i] : "N/A");
     printf("\tArguments (%d):\n", command->arg_count);
-    for (i=0;i<command->arg_count;++i)
+    for (i = 0; i < command->arg_count; ++i)
         printf("\t\tArg %d: %s\n", i, command->args[i]);
-    if (command->next)
-    {
+    if (command->next) {
         printf("\tPiped to:\n");
         print_command(command->next);
     }
 
 
 }
+
 /**
  * Release allocated memory of a command
  * @param  command [description]
  * @return         [description]
  */
-int free_command(struct command_t *command)
-{
-    if (command->arg_count)
-    {
-        for (int i=0; i<command->arg_count; ++i)
+int free_command(struct command_t *command) {
+    if (command->arg_count) {
+        for (int i = 0; i < command->arg_count; ++i)
             free(command->args[i]);
         free(command->args);
     }
-    for (int i=0;i<3;++i)
+    for (int i = 0; i < 3; ++i)
         if (command->redirects[i])
             free(command->redirects[i]);
-    if (command->next)
-    {
+    if (command->next) {
         free_command(command->next);
-        command->next=NULL;
+        command->next = NULL;
     }
     free(command->name);
     free(command);
     return 0;
 }
+
 /**
  * Show the command prompt
  * @return [description]
  */
-int show_prompt()
-{
+int show_prompt() {
     char cwd[1024], hostname[1024];
     gethostname(hostname, sizeof(hostname));
     getcwd(cwd, sizeof(cwd));
     printf("%s@%s:%s %s$ ", getenv("USER"), hostname, cwd, sysname);
     return 0;
 }
+
 /**
  * Parse a command string into a command struct
  * @param  buf     [description]
  * @param  command [description]
  * @return         0
  */
-int parse_command(char *buf, struct command_t *command)
-{
-    const char *splitters=" \t"; // split at whitespace
+int parse_command(char *buf, struct command_t *command) {
+    const char *splitters = " \t"; // split at whitespace
     int index, len;
-    len=strlen(buf);
-    while (len>0 && strchr(splitters, buf[0])!=NULL) // trim left whitespace
+    len = strlen(buf);
+    while (len > 0 && strchr(splitters, buf[0]) != NULL) // trim left whitespace
     {
         buf++;
         len--;
     }
-    while (len>0 && strchr(splitters, buf[len-1])!=NULL)
-        buf[--len]=0; // trim right whitespace
+    while (len > 0 && strchr(splitters, buf[len - 1]) != NULL)
+        buf[--len] = 0; // trim right whitespace
 
-    if (len>0 && buf[len-1]=='?') // auto-complete
-        command->auto_complete=true;
-    if (len>0 && buf[len-1]=='&') // background
-        command->background=true;
+    if (len > 0 && buf[len - 1] == '?') // auto-complete
+        command->auto_complete = true;
+    if (len > 0 && buf[len - 1] == '&') // background
+        command->background = true;
 
     char *pch = strtok(buf, splitters);
-    command->name=(char *)malloc(strlen(pch)+1);
-    if (pch==NULL)
-        command->name[0]=0;
+    command->name = (char *) malloc(strlen(pch) + 1);
+    if (pch == NULL)
+        command->name[0] = 0;
     else
         strcpy(command->name, pch);
 
-    command->args=(char **)malloc(sizeof(char *));
+    command->args = (char **) malloc(sizeof(char *));
 
     int redirect_index;
-    int arg_index=0;
+    int arg_index = 0;
     char temp_buf[1024], *arg;
-    while (1)
-    {
+    while (1) {
         // tokenize input on splitters
         pch = strtok(NULL, splitters);
         if (!pch) break;
-        arg=temp_buf;
+        arg = temp_buf;
         strcpy(arg, pch);
-        len=strlen(arg);
+        len = strlen(arg);
 
-        if (len==0) continue; // empty arg, go for next
-        while (len>0 && strchr(splitters, arg[0])!=NULL) // trim left whitespace
+        if (len == 0) continue; // empty arg, go for next
+        while (len > 0 && strchr(splitters, arg[0]) != NULL) // trim left whitespace
         {
             arg++;
             len--;
         }
-        while (len>0 && strchr(splitters, arg[len-1])!=NULL) arg[--len]=0; // trim right whitespace
-        if (len==0) continue; // empty arg, go for next
+        while (len > 0 && strchr(splitters, arg[len - 1]) != NULL) arg[--len] = 0; // trim right whitespace
+        if (len == 0) continue; // empty arg, go for next
 
         // piping to another command
-        if (strcmp(arg, "|")==0)
-        {
-            struct command_t *c=malloc(sizeof(struct command_t));
-            int l=strlen(pch);
-            pch[l]=splitters[0]; // restore strtok termination
-            index=1;
-            while (pch[index]==' ' || pch[index]=='\t') index++; // skip whitespaces
+        if (strcmp(arg, "|") == 0) {
+            struct command_t *c = malloc(sizeof(struct command_t));
+            int l = strlen(pch);
+            pch[l] = splitters[0]; // restore strtok termination
+            index = 1;
+            while (pch[index] == ' ' || pch[index] == '\t') index++; // skip whitespaces
 
-            parse_command(pch+index, c);
-            pch[l]=0; // put back strtok termination
-            command->next=c;
+            parse_command(pch + index, c);
+            pch[l] = 0; // put back strtok termination
+            command->next = c;
             continue;
         }
 
         // background process
-        if (strcmp(arg, "&")==0)
+        if (strcmp(arg, "&") == 0)
             continue; // handled before
 
         // handle input redirection
-        redirect_index=-1;
-        if (arg[0]=='<')
-            redirect_index=0;
-        if (arg[0]=='>')
-        {
-            if (len>1 && arg[1]=='>')
-            {
-                redirect_index=2;
+        redirect_index = -1;
+        if (arg[0] == '<')
+            redirect_index = 0;
+        if (arg[0] == '>') {
+            if (len > 1 && arg[1] == '>') {
+                redirect_index = 2;
                 arg++;
                 len--;
-            }
-            else redirect_index=1;
+            } else redirect_index = 1;
         }
-        if (redirect_index != -1)
-        {
-            command->redirects[redirect_index]=malloc(len);
-            strcpy(command->redirects[redirect_index], arg+1);
+        if (redirect_index != -1) {
+            command->redirects[redirect_index] = malloc(len);
+            strcpy(command->redirects[redirect_index], arg + 1);
             continue;
         }
 
         // normal arguments
-        if (len>2 && ((arg[0]=='"' && arg[len-1]=='"')
-                      || (arg[0]=='\'' && arg[len-1]=='\''))) // quote wrapped arg
+        if (len > 2 && ((arg[0] == '"' && arg[len - 1] == '"')
+                        || (arg[0] == '\'' && arg[len - 1] == '\''))) // quote wrapped arg
         {
-            arg[--len]=0;
+            arg[--len] = 0;
             arg++;
         }
-        command->args=(char **)realloc(command->args, sizeof(char *)*(arg_index+1));
-        command->args[arg_index]=(char *)malloc(len+1);
+        command->args = (char **) realloc(command->args, sizeof(char *) * (arg_index + 1));
+        command->args[arg_index] = (char *) malloc(len + 1);
         strcpy(command->args[arg_index++], arg);
     }
-    command->arg_count=arg_index;
+    command->arg_count = arg_index;
     return 0;
 }
-void prompt_backspace()
-{
+
+void prompt_backspace() {
     putchar(8); // go back 1
     putchar(' '); // write empty over
     putchar(8); // go back 1 again
 }
+
 /**
  * Prompt a command from the user
  * @param  buf      [description]
  * @param  buf_size [description]
  * @return          [description]
  */
-int prompt(struct command_t *command)
-{
-    int index=0;
+int prompt(struct command_t *command) {
+    int index = 0;
     char c;
     char buf[4096];
     static char oldbuf[4096];
@@ -226,68 +220,62 @@ int prompt(struct command_t *command)
 
     //FIXME: backspace is applied before printing chars
     show_prompt();
-    int multicode_state=0;
-    buf[0]=0;
-    while (1)
-    {
-        c=getchar();
+    int multicode_state = 0;
+    buf[0] = 0;
+    while (1) {
+        c = getchar();
         // printf("Keycode: %u\n", c); // DEBUG: uncomment for debugging
 
-        if (c==9) // handle tab
+        if (c == 9) // handle tab
         {
-            buf[index++]='?'; // autocomplete
+            buf[index++] = '?'; // autocomplete
             break;
         }
 
-        if (c==127) // handle backspace
+        if (c == 127) // handle backspace
         {
-            if (index>0)
-            {
+            if (index > 0) {
                 prompt_backspace();
                 index--;
             }
             continue;
         }
-        if (c==27 && multicode_state==0) // handle multi-code keys
+        if (c == 27 && multicode_state == 0) // handle multi-code keys
         {
-            multicode_state=1;
+            multicode_state = 1;
             continue;
         }
-        if (c==91 && multicode_state==1)
-        {
-            multicode_state=2;
+        if (c == 91 && multicode_state == 1) {
+            multicode_state = 2;
             continue;
         }
-        if (c==65 && multicode_state==2) // up arrow
+        if (c == 65 && multicode_state == 2) // up arrow
         {
             int i;
-            while (index>0)
-            {
+            while (index > 0) {
                 prompt_backspace();
                 index--;
             }
-            for (i=0;oldbuf[i];++i)
-            {
+            for (i = 0; oldbuf[i]; ++i) {
                 putchar(oldbuf[i]);
-                buf[i]=oldbuf[i];
+                buf[i] = oldbuf[i];
             }
-            index=i;
+            index = i;
             continue;
-        }
-        else
-            multicode_state=0;
+        } else
+            multicode_state = 0;
 
         putchar(c); // echo the character
-        buf[index++]=c;
-        if (index>=sizeof(buf)-1) break;
-        if (c=='\n') // enter key
+        buf[index++] = c;
+        if (index >= sizeof(buf) - 1) break;
+        if (c == '\n') // enter key
             break;
-        if (c==4) // Ctrl+D
+        if (c == 4) // Ctrl+D
             return EXIT;
     }
-    if (index>0 && buf[index-1]=='\n') // trim newline from the end
+    if (index > 0 && buf[index - 1] == '\n') // trim newline from the end
         index--;
-    buf[index++]=0; // null terminate string
+    buf[index++] = 0; // null terminate string
 
     strcpy(oldbuf, buf);
 
@@ -299,20 +287,20 @@ int prompt(struct command_t *command)
     tcsetattr(STDIN_FILENO, TCSANOW, &backup_termios);
     return SUCCESS;
 }
+
 int process_command(struct command_t *command);
-int main()
-{
-    while (1)
-    {
-        struct command_t *command=malloc(sizeof(struct command_t));
+
+int main() {
+    while (1) {
+        struct command_t *command = malloc(sizeof(struct command_t));
         memset(command, 0, sizeof(struct command_t)); // set all bytes to 0
 
         int code;
         code = prompt(command);
-        if (code==EXIT) break;
+        if (code == EXIT) break;
 
         code = process_command(command);
-        if (code==EXIT) break;
+        if (code == EXIT) break;
 
         free_command(command);
     }
@@ -321,27 +309,24 @@ int main()
     return 0;
 }
 
-int process_command(struct command_t *command)
-{
+int process_command(struct command_t *command) {
     int r;
-    if (strcmp(command->name, "")==0) return SUCCESS;
+    if (strcmp(command->name, "") == 0) return SUCCESS;
 
-    if (strcmp(command->name, "exit")==0)
+    if (strcmp(command->name, "exit") == 0)
         return EXIT;
 
-    if (strcmp(command->name, "cd")==0)
-    {
-        if (command->arg_count > 0)
-        {
-            r=chdir(command->args[0]);
-            if (r==-1)
+    if (strcmp(command->name, "cd") == 0) {
+        if (command->arg_count > 0) {
+            r = chdir(command->args[0]);
+            if (r == -1)
                 printf("-%s: %s: %s\n", sysname, command->name, strerror(errno));
             return SUCCESS;
         }
     }
 
-    pid_t pid=fork();
-    if (pid==0) // child
+    pid_t pid = fork();
+    if (pid == 0) // child
     {
         /// This shows how to do exec with environ (but is not available on MacOs)
         // extern char** environ; // environment variables
@@ -352,24 +337,31 @@ int process_command(struct command_t *command)
         // as required by exec
 
         // increase args size by 2
-        command->args=(char **)realloc(
-                command->args, sizeof(char *)*(command->arg_count+=2));
+        command->args = (char **) realloc(
+                command->args, sizeof(char *) * (command->arg_count += 2));
 
         // shift everything forward by 1
-        for (int i=command->arg_count-2;i>0;--i)
-            command->args[i]=command->args[i-1];
+        for (int i = command->arg_count - 2; i > 0; --i)
+            command->args[i] = command->args[i - 1];
 
         // set args[0] as a copy of name
-        command->args[0]=strdup(command->name);
+        command->args[0] = strdup(command->name);
         // set args[arg_count-1] (last) to NULL
-        command->args[command->arg_count-1]=NULL;
+        command->args[command->arg_count - 1] = NULL;
 
-        execvp(command->name, command->args); // exec+args+path
-        exit(0);
-        /// TODO: do your own exec with path resolving using execv()
-    }
-    else
-    {
+        // execvp(command->name, command->args); // exec+args+path
+        char *path = getenv("PATH");
+        char *path_tokenizer = strtok(path, ":");
+        while (path_tokenizer != NULL) {
+            char full_path[strlen(path_tokenizer) + strlen(command->name) + 1];
+            combine_path(full_path, path_tokenizer, command->name);
+            execv(full_path, command->args);
+            path_tokenizer = strtok(NULL, ":");
+        }
+
+        // If we reach here, we couldn't find the command on path
+        exit(UNKNOWN);
+    } else {
         if (!command->background)
             wait(0); // wait for child process to finish
         return SUCCESS;
@@ -379,4 +371,24 @@ int process_command(struct command_t *command)
 
     printf("-%s: %s: command not found\n", sysname, command->name);
     return UNKNOWN;
+}
+
+void combine_path(char *result, char *directory, char *file) {
+    if ((directory == NULL || strlen(directory) == 0) && (file == NULL || strlen(file) == 0)) {
+        strcpy(result, "");
+    } else if (file == NULL || strlen(file) == 0) {
+        strcpy(result, directory);
+    } else if (directory == NULL || strlen(directory) == 0) {
+        strcpy(result, file);
+    } else {
+        char directory_separator[] = "/";
+        const char *directory_last_character = directory;
+        while (*(directory_last_character + 1) != '\0')
+            directory_last_character++;
+        int directory_contains_separator_at_the_end = strcmp(directory_last_character, directory_separator) == 0;
+        strcpy(result, directory);
+        if (!directory_contains_separator_at_the_end)
+            strcat(result, directory_separator);
+        strcat(result, file);
+    }
 }
