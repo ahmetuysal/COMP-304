@@ -289,9 +289,13 @@ int prompt(struct command_t *command) {
 
 void combine_path(char *, char *, char *);
 
-int process_command(struct command_t *command, int pipeFromParent[]);
+int process_command(struct command_t *command, int parent_to_child_pipe[2]);
+
+int execute_command(struct command_t *command);
 
 int execv_command(struct command_t *command);
+
+int process_command_child(struct command_t *command, const int *child_to_parent_pipe);
 
 int main() {
     while (1) {
@@ -312,23 +316,22 @@ int main() {
     return 0;
 }
 
-int process_command(struct command_t *command, int pipeFromParent[]) {
-
-    if (pipeFromParent != NULL) {
-        close(pipeFromParent[1]); // we will only use read end
+int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
+    if (parent_to_child_pipe != NULL) {
+        close(parent_to_child_pipe[1]);
     }
 
     int r;
     if (strcmp(command->name, "") == 0) {
-        if (pipeFromParent != NULL) {
-            close(pipeFromParent[0]);
+        if (parent_to_child_pipe != NULL) {
+            close(parent_to_child_pipe[0]);
         }
         return SUCCESS;
     }
 
     if (strcmp(command->name, "exit") == 0) {
-        if (pipeFromParent != NULL) {
-            close(pipeFromParent[0]);
+        if (parent_to_child_pipe != NULL) {
+            close(parent_to_child_pipe[0]);
         }
         return EXIT;
     }
@@ -338,141 +341,161 @@ int process_command(struct command_t *command, int pipeFromParent[]) {
             r = chdir(command->args[0]);
             if (r == -1)
                 printf("-%s: %s: %s\n", sysname, command->name, strerror(errno));
-            if (pipeFromParent != NULL) {
-                close(pipeFromParent[0]);
+            if (parent_to_child_pipe != NULL) {
+                close(parent_to_child_pipe[0]);
             }
             return SUCCESS;
         }
     }
 
+    int child_to_parent_pipe[2];
+    int have_child_to_parent_pipe = 0;
+
+    // command is piped to another command, we need to create a pipe to get its stdout and deliver to next command
+    if (command->next) {
+        pipe(child_to_parent_pipe);
+        have_child_to_parent_pipe = 1;
+    }
+
     pid_t pid = fork();
-    if (pid == 0) // child
-    {
-        // Handle redirecting
-
-        int num_redirects_from_stdout = 0;
-
-        if (command->redirects[1] != NULL) {
-            num_redirects_from_stdout++;
+    if (pid == 0) {
+        // child
+        if (parent_to_child_pipe != NULL) {
+            dup2(parent_to_child_pipe[0], STDIN_FILENO);
+        }
+        return process_command_child(command, child_to_parent_pipe);
+    } else {
+        // parent site
+        if (parent_to_child_pipe != NULL) {
+            close(parent_to_child_pipe[0]);
+            close(parent_to_child_pipe[1]);
         }
 
-        if (command->redirects[2] != NULL) {
-            num_redirects_from_stdout++;
+        if (have_child_to_parent_pipe) {
+            close(child_to_parent_pipe[1]);
+        }
+
+        if (!command->background || command->next) {
+            waitpid(pid, NULL, 0); // wait for child process to finish
         }
 
         if (command->next) {
-            num_redirects_from_stdout++;
-        }
-
-        // if stdout is redirected to more than one file/pipe, store it in a temp file and copy later
-        int stdout_redirected_to_multiple_files = num_redirects_from_stdout > 1;
-
-        // <: input is read from a file
-        if (command->redirects[0] != NULL) {
-            freopen(command->redirects[0], "r", stdin);
-        } else if (pipeFromParent != NULL) {
-            dup2(pipeFromParent[0], STDIN_FILENO);
-        }
-
-        // >: output is written to a file, in write mode
-        if (!stdout_redirected_to_multiple_files && command->redirects[1] != NULL) {
-            freopen(command->redirects[1], "w", stdout);
-        }
-            // >>: output is written to a file, in append mode
-        else if (!stdout_redirected_to_multiple_files && command->redirects[2] != NULL) {
-            freopen(command->redirects[2], "a", stdout);
-        }
-
-        if (!stdout_redirected_to_multiple_files && command->next) {
-
-        }
-
-        if (stdout_redirected_to_multiple_files) {
-            char temp_filename[16 + 1];
-            tmpnam(temp_filename);
-
-            pid_t pid2 = fork();
-            if (pid2 == 0) {
-                // grandchild
-                FILE *tmp_file = fopen(temp_filename, "w");
-                dup2(fileno(tmp_file), STDOUT_FILENO);
-                return execv_command(command);
-            } else {
-                // wait for grandchild to finish and copy temp file to redirected files
-                int status;
-                waitpid(pid2, &status, 0);
-                FILE *temp_fp = fopen(temp_filename, "r");
-
-                FILE *trunc_fp = NULL, *append_fp = NULL;
-
-                if (command->redirects[1] != NULL) {
-                    trunc_fp = fopen(command->redirects[1], "w");
-                }
-
-                if (command->redirects[2] != NULL) {
-                    append_fp = fopen(command->redirects[2], "a");
-                }
-                char *fileContent;
-
-                fseek(temp_fp, 0, SEEK_END);
-                fileContent = (char *) malloc(sizeof(*fileContent) * ftell(temp_fp));
-                fseek(temp_fp, 0, SEEK_SET);
-
-                fread(&fileContent, sizeof(fileContent), 1, temp_fp);
-                fclose(temp_fp);
-
-                if (command->redirects[1] != NULL) {
-                    fwrite(&fileContent, sizeof(fileContent), 1, trunc_fp);
-                    fclose(trunc_fp);
-                }
-                if (command->redirects[2] != NULL) {
-                    fwrite(&fileContent, sizeof(fileContent), 1, append_fp);
-                    fclose(append_fp);
-                }
-                if (command->next) {
-                    int parentToChildPipe[2];
-                    if (pipe(parentToChildPipe)) {
-                        perror("Parent -> Child Pipe failed");
-                    }
-
-                    pid_t childPID = fork();
-                    if (childPID == 0) {
-                        // child will run this part
-                        process_command(command->next, parentToChildPipe);
-                    } else if (childPID < 0) {
-                        /* The fork failed. */
-                        perror("Fork failed");
-                    } else {
-                        // parent will run this part
-                        // TODO: what happens if size of file is > 64kb
-                        close(parentToChildPipe[0]); // Close read end of parent -> child pipe
-                        write(parentToChildPipe[1], &fileContent, sizeof(fileContent));
-                        close(parentToChildPipe[1]); // Close write end of parent -> child pipe
-                    }
-
-                    free(fileContent);
-                    remove(temp_filename);
-                    return SUCCESS;
-                }
+            // how to transfer pipe data?
+            int argument_transfer_pipe[2];
+            pipe(argument_transfer_pipe);
+            char buffer[BUFSIZ];
+            ssize_t read_chars;
+            while ((read_chars = read(child_to_parent_pipe[0], &buffer, sizeof(buffer))) > 0) {
+                write(argument_transfer_pipe[1], &buffer, read_chars);
             }
-            // we don't need to redirect to multiple files
-            // directly run the execv command
-        } else {
-            return execv_command(command);
+            close(child_to_parent_pipe[0]);
+            close(argument_transfer_pipe[1]);
+            return process_command(command->next, argument_transfer_pipe);
         }
-    } else {
-        if (!command->background) {
-            waitpid(pid, NULL, 0); // wait for child process to finish
-        }
+
         return SUCCESS;
     }
-
-    // TODO: your implementation here
-
-    printf("-%s: %s: command not found\n", sysname, command->name);
-    return UNKNOWN;
 }
 
+int process_command_child(struct command_t *command, const int *child_to_parent_pipe) {
+    // Handle redirecting
+    int num_redirects_from_stdout = 0;
+    if (command->redirects[1] != NULL) {
+        num_redirects_from_stdout++;
+    }
+    if (command->redirects[2] != NULL) {
+        num_redirects_from_stdout++;
+    }
+    if (command->next) {
+        num_redirects_from_stdout++;
+    }
+    // if stdout is redirected to more than one file/pipe, store it in a temp file and copy later
+    int stdout_redirected_to_multiple_files = num_redirects_from_stdout > 1;
+
+    // <: input is read from a file
+    if (command->redirects[0] != NULL) {
+        freopen(command->redirects[0], "r", stdin);
+    }
+
+    // >: output is written to a file, in write mode
+    if (!stdout_redirected_to_multiple_files && command->redirects[1] != NULL) {
+        freopen(command->redirects[1], "w", stdout);
+    }
+        // >>: output is written to a file, in append mode
+    else if (!stdout_redirected_to_multiple_files && command->redirects[2] != NULL) {
+        freopen(command->redirects[2], "a", stdout);
+    } else if (!stdout_redirected_to_multiple_files && command->next) {
+        // TODO: what happens if size of file is > 64kb
+        dup2(child_to_parent_pipe[1], STDOUT_FILENO);
+        close(child_to_parent_pipe[1]);
+        execute_command(command);
+    } else if (stdout_redirected_to_multiple_files) {
+        char temp_filename[16 + 1];
+        tmpnam(temp_filename);
+
+        pid_t pid2 = fork();
+        if (pid2 == 0) {
+            // grandchild
+            FILE *tmp_file = fopen(temp_filename, "w");
+            dup2(fileno(tmp_file), STDOUT_FILENO);
+            return execute_command(command);
+        } else {
+            // wait for grandchild to finish and copy temp file to redirected files
+            int status;
+            waitpid(pid2, &status, 0);
+            FILE *temp_fp = fopen(temp_filename, "r");
+
+            FILE *trunc_fp = NULL, *append_fp = NULL;
+
+            if (command->redirects[1] != NULL) {
+                trunc_fp = fopen(command->redirects[1], "w");
+            }
+
+            if (command->redirects[2] != NULL) {
+                append_fp = fopen(command->redirects[2], "a");
+            }
+            char *fileContent;
+
+            fseek(temp_fp, 0, SEEK_END);
+            fileContent = (char *) malloc(sizeof(*fileContent) * ftell(temp_fp));
+            fseek(temp_fp, 0, SEEK_SET);
+
+            fread(&fileContent, sizeof(fileContent), 1, temp_fp);
+            fclose(temp_fp);
+
+            if (command->redirects[1] != NULL) {
+                fwrite(&fileContent, sizeof(fileContent), 1, trunc_fp);
+                fclose(trunc_fp);
+            }
+            if (command->redirects[2] != NULL) {
+                fwrite(&fileContent, sizeof(fileContent), 1, append_fp);
+                fclose(append_fp);
+            }
+
+            if (command->next) {
+                // TODO: file content > 64kb case
+                write(child_to_parent_pipe[1], &fileContent, sizeof(fileContent));
+                close(child_to_parent_pipe[1]);
+            }
+            free(fileContent);
+            remove(temp_filename);
+            return SUCCESS;
+        }
+        // we don't need to redirect to multiple files
+        // directly run the execute_command
+    } else {
+        return execute_command(command);
+    }
+}
+
+// responsible for executing both built-in and external commands
+int execute_command(struct command_t *command) {
+    // TODO: add built-in commands
+    return execv_command(command);
+
+}
+
+// responsible for executing external commands
 int execv_command(struct command_t *command) {
     // increase args size by 2
     command->args = (char **) realloc(
@@ -498,7 +521,8 @@ int execv_command(struct command_t *command) {
     }
 
     // If we reach here, we couldn't find the command on path
-    exit(UNKNOWN);
+    printf("-%s: %s: command not found\n", sysname, command->name);
+    return UNKNOWN;
 }
 
 void combine_path(char *result, char *directory, char *file) {
