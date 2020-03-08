@@ -290,6 +290,8 @@ int prompt(struct command_t *command) {
 
 int process_command(struct command_t *command);
 
+int execv_command(struct command_t *command);
+
 int main() {
     while (1) {
         struct command_t *command = malloc(sizeof(struct command_t));
@@ -328,42 +330,63 @@ int process_command(struct command_t *command) {
     pid_t pid = fork();
     if (pid == 0) // child
     {
-        /// This shows how to do exec with environ (but is not available on MacOs)
-        // extern char** environ; // environment variables
-        // execvpe(command->name, command->args, environ); // exec+args+path+environ
+        // Handle redirecting
 
-        /// This shows how to do exec with auto-path resolve
-        // add a NULL argument to the end of args, and the name to the beginning
-        // as required by exec
+        int stdout_redirected_to_multiple_files = command->redirects[1] != NULL && command->redirects[2] != NULL;
 
-        // increase args size by 2
-        command->args = (char **) realloc(
-                command->args, sizeof(char *) * (command->arg_count += 2));
-
-        // shift everything forward by 1
-        for (int i = command->arg_count - 2; i > 0; --i)
-            command->args[i] = command->args[i - 1];
-
-        // set args[0] as a copy of name
-        command->args[0] = strdup(command->name);
-        // set args[arg_count-1] (last) to NULL
-        command->args[command->arg_count - 1] = NULL;
-
-        // execvp(command->name, command->args); // exec+args+path
-        char *path = getenv("PATH");
-        char *path_tokenizer = strtok(path, ":");
-        while (path_tokenizer != NULL) {
-            char full_path[strlen(path_tokenizer) + strlen(command->name) + 1];
-            combine_path(full_path, path_tokenizer, command->name);
-            execv(full_path, command->args);
-            path_tokenizer = strtok(NULL, ":");
+        // <: input is read from a file
+        if (command->redirects[0] != NULL) {
+            freopen(command->redirects[0], "r", stdin);
         }
 
-        // If we reach here, we couldn't find the command on path
-        exit(UNKNOWN);
+        // if both out redirects are used, stdout is temporarily redirected to a temp file and copied after execv call
+
+        // >: output is written to a file, in write mode
+        if (!stdout_redirected_to_multiple_files && command->redirects[1] != NULL) {
+            freopen(command->redirects[1], "w", stdout);
+        }
+            // >>: output is written to a file, in append mode
+        else if (!stdout_redirected_to_multiple_files && command->redirects[2] != NULL) {
+            freopen(command->redirects[2], "a", stdout);
+        }
+
+        if (stdout_redirected_to_multiple_files) {
+            char temp_filename[16 + 1];
+            tmpnam(temp_filename);
+
+            pid_t pid2 = fork();
+            if (pid2 == 0) {
+                // grandchild
+                FILE *tmp_file = fopen(temp_filename, "w");
+                dup2(fileno(tmp_file), STDOUT_FILENO);
+                return execv_command(command);
+            } else {
+                // wait for grandchild to finish and copy temp file to redirected files
+                int status;
+                waitpid(pid2, &status, 0);
+                FILE *trunc_fp = fopen(command->redirects[1], "w");
+                FILE *append_fp = fopen(command->redirects[2], "a");
+                FILE *temp_fp = fopen(temp_filename, "r");
+                char c;
+                while (fread(&c, 1, 1, temp_fp) == 1) {
+                    fwrite(&c, 1, 1, trunc_fp);
+                    fwrite(&c, 1, 1, append_fp);
+                }
+                fclose(temp_fp);
+                fclose(trunc_fp);
+                fclose(append_fp);
+                remove(temp_filename);
+                return SUCCESS;
+            }
+        }
+            // we don't need to redirect to multiple files
+            // directly run the execv command
+        else {
+            return execv_command(command);
+        }
     } else {
         if (!command->background)
-            wait(0); // wait for child process to finish
+            waitpid(pid, NULL, 0); // wait for child process to finish
         return SUCCESS;
     }
 
@@ -371,6 +394,34 @@ int process_command(struct command_t *command) {
 
     printf("-%s: %s: command not found\n", sysname, command->name);
     return UNKNOWN;
+}
+
+int execv_command(struct command_t *command) {
+    // increase args size by 2
+    command->args = (char **) realloc(
+            command->args, sizeof(char *) * (command->arg_count += 2));
+
+    // shift everything forward by 1
+    for (int i = command->arg_count - 2; i > 0; --i)
+        command->args[i] = command->args[i - 1];
+
+    // set args[0] as a copy of name
+    command->args[0] = strdup(command->name);
+    // set args[arg_count-1] (last) to NULL
+    command->args[command->arg_count - 1] = NULL;
+
+    // execvp(command->name, command->args); // exec+args+path
+    char *path = getenv("PATH");
+    char *path_tokenizer = strtok(path, ":");
+    while (path_tokenizer != NULL) {
+        char full_path[strlen(path_tokenizer) + strlen(command->name) + 1];
+        combine_path(full_path, path_tokenizer, command->name);
+        execv(full_path, command->args);
+        path_tokenizer = strtok(NULL, ":");
+    }
+
+    // If we reach here, we couldn't find the command on path
+    exit(UNKNOWN);
 }
 
 void combine_path(char *result, char *directory, char *file) {
