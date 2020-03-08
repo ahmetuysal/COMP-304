@@ -64,7 +64,7 @@ int main(void) {
             perror("Fork failed");
         }
         else {
-            // child will run this part
+            // parent will run this part
             close(childToGrandchildPipe[0]); // Close read end of child -> grandchild pipe
             close(grandchildToChildPipe[1]); // Close write end of grandchild -> child pipe
 
