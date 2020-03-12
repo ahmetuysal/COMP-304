@@ -20,6 +20,7 @@ enum return_codes {
     SUCCESS = 0,
     EXIT = 1,
     UNKNOWN = 2,
+    INVALID = 3
 };
 struct command_t {
     char *name;
@@ -538,15 +539,14 @@ int execvp_command(struct command_t *command) {
 int execute_command(struct command_t *command) {
     // TODO: add builtin commands here
     if (strcmp(command->name, "myjobs") == 0) {
-        char *current_user = getenv("USER");
-        command->name = "ps";
-
         // myjobs does not accept any args
         if (command->arg_count != 0) {
             print_warning("myjobs does not accept any arguments, arguments are omitted");
         }
 
-        // add 7 extra arguments for ps -U current_user -o pid,cmd,s
+        char *current_user = getenv("USER");
+        command->name = "ps";
+        // add 4 extra arguments for ps -U current_user -o pid,cmd,s
         command->args = (char **) realloc(
                 command->args, sizeof(char *) * (command->arg_count = 4));
 
@@ -555,7 +555,22 @@ int execute_command(struct command_t *command) {
         command->args[2] = "-o";
         command->args[3] = "pid,cmd,s";
 
+        return execvp_command(command);
+    }
 
+    if (strcmp(command->name, "pause") == 0) {
+        if (command->arg_count != 1) {
+            print_error("pause requires only one argument <PID>");
+            return INVALID;
+        }
+
+        command->name = "kill";
+        // 2 arguments for kill -SIGSTOP <PID>
+        command->args = (char **) realloc(
+                command->args, sizeof(char *) * (command->arg_count = 2));
+
+        command->args[1] = command->args[0];
+        command->args[0] = "-SIGSTOP";
         return execvp_command(command);
     }
 
