@@ -383,9 +383,11 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         if (parent_to_child_pipe != NULL) {
             dup2(parent_to_child_pipe[0], STDIN_FILENO);
         }
-
         return process_command_child(command, child_to_parent_pipe);
-    } else {
+    }
+    else {
+        printf("Command is %s argument count is %d\n", command->name, command->arg_count);
+        print_command(command);
         // parent site
         if (parent_to_child_pipe != NULL) {
             close(parent_to_child_pipe[0]);
@@ -399,6 +401,23 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         if (!command->background || command->next) {
             waitpid(pid, NULL, 0); // wait for child process to finish
         }
+
+        // TODO: myfg bring command to foreground
+        // TODO: why does it not go into here?
+        if (strcmp(command->name, "myfg") == 0 && command->arg_count == 1) {
+            long process_pid = strtol(command->args[0], NULL, 10);
+            printf("Parent is in myfg %ld\n", process_pid);
+            int status;
+
+            while (true) {
+                waitpid(process_pid, &status, 0);
+                printf("Print pid return with status: %d\n", status);
+                if (WIFEXITED(status)) {
+                    break;
+                }
+            }
+        }
+
 
         if (command->next) {
             // how to transfer pipe data?
@@ -450,7 +469,6 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
         freopen(command->redirects[2], "a", stdout);
         freopen(command->redirects[2], "a", stderr);
     } else if (!stdout_redirected_to_multiple_files && command->next) {
-        // TODO: what happens if size of file is > 64kb
         // TODO: this is not working
         dup2(child_to_parent_pipe[1], STDOUT_FILENO);
         dup2(child_to_parent_pipe[1], STDERR_FILENO);
@@ -563,15 +581,30 @@ int execute_command(struct command_t *command) {
             print_error("pause requires only one argument <PID>");
             return INVALID;
         }
+        long process_pid = strtol(command->args[0], NULL, 10);
+        kill(process_pid, SIGSTOP);
+        return SUCCESS;
+    }
 
-        command->name = "kill";
-        // 2 arguments for kill -SIGSTOP <PID>
-        command->args = (char **) realloc(
-                command->args, sizeof(char *) * (command->arg_count = 2));
+    if (strcmp(command->name, "mybg") == 0) {
+        if (command->arg_count != 1) {
+            print_error("mybg requires only one argument <PID>");
+            return INVALID;
+        }
+        long process_pid = strtol(command->args[0], NULL, 10);
+        kill(process_pid, SIGCONT);
+        return SUCCESS;
+    }
 
-        command->args[1] = command->args[0];
-        command->args[0] = "-SIGSTOP";
-        return execvp_command(command);
+    if (strcmp(command->name, "myfg") == 0) {
+        if (command->arg_count != 1) {
+            print_error("myfg requires only one argument <PID>");
+            return INVALID;
+        }
+
+        long process_pid = strtol(command->args[0], NULL, 10);
+        kill(process_pid, SIGCONT);
+        return SUCCESS;
     }
 
     return execv_command(command);
