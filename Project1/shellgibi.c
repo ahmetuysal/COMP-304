@@ -7,8 +7,14 @@
 #include <stdbool.h>
 #include <errno.h>
 
-const char *sysname = "shellgibi";
 
+// ansi color codes
+// TODO: sahbaz https://bluesock.org/~willkg/dev/ansi.html
+#define ANSI_COLOR_RESET   "\x1b[0m"
+#define ANSI_COLOR_ERROR    "\x1b[1;31m"
+#define ANSI_COLOR_WARNING "\x1b[1;33;46m"
+
+const char *sysname = "shellgibi";
 
 enum return_codes {
     SUCCESS = 0,
@@ -24,6 +30,10 @@ struct command_t {
     char *redirects[3]; // in/out redirection
     struct command_t *next; // for piping
 };
+
+void print_warning(char *message);
+
+void print_error(char *message);
 
 /**
  * Prints a command struct
@@ -55,18 +65,24 @@ void print_command(struct command_t *command) {
  */
 int free_command(struct command_t *command) {
     if (command->arg_count) {
-        for (int i = 0; i < command->arg_count; ++i)
+        for (int i = 0; i < command->arg_count; ++i) {
             free(command->args[i]);
+            command->args[i] = NULL;
+        }
         free(command->args);
+        command->args = 0;
     }
     for (int i = 0; i < 3; ++i)
-        if (command->redirects[i])
+        if (command->redirects[i]) {
             free(command->redirects[i]);
+            command->redirects[i] = NULL;
+        }
     if (command->next) {
         free_command(command->next);
         command->next = NULL;
     }
     free(command->name);
+    command->name = NULL;
     free(command);
     return 0;
 }
@@ -295,7 +311,10 @@ int execute_command(struct command_t *command);
 
 int execv_command(struct command_t *command);
 
+int execvp_command(struct command_t *command);
+
 int process_command_child(struct command_t *command, const int *child_to_parent_pipe);
+
 
 int main() {
     while (1) {
@@ -363,6 +382,7 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         if (parent_to_child_pipe != NULL) {
             dup2(parent_to_child_pipe[0], STDIN_FILENO);
         }
+
         return process_command_child(command, child_to_parent_pipe);
     } else {
         // parent site
@@ -419,20 +439,26 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
 
     // >: output is written to a file, in write mode
     if (!stdout_redirected_to_multiple_files && command->redirects[1] != NULL) {
+        // TODO: this is not working
         freopen(command->redirects[1], "w", stdout);
+        freopen(command->redirects[1], "w", stderr);
     }
         // >>: output is written to a file, in append mode
     else if (!stdout_redirected_to_multiple_files && command->redirects[2] != NULL) {
+        // TODO: this is not working
         freopen(command->redirects[2], "a", stdout);
+        freopen(command->redirects[2], "a", stderr);
     } else if (!stdout_redirected_to_multiple_files && command->next) {
         // TODO: what happens if size of file is > 64kb
+        // TODO: this is not working
         dup2(child_to_parent_pipe[1], STDOUT_FILENO);
+        dup2(child_to_parent_pipe[1], STDERR_FILENO);
         close(child_to_parent_pipe[1]);
-        execute_command(command);
+        return execute_command(command);
     } else if (stdout_redirected_to_multiple_files) {
         char temp_filename[16 + 1];
         tmpnam(temp_filename);
-
+        printf("File name: %s\n", temp_filename);
         pid_t pid2 = fork();
         if (pid2 == 0) {
             // grandchild
@@ -454,45 +480,86 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
             if (command->redirects[2] != NULL) {
                 append_fp = fopen(command->redirects[2], "a");
             }
-            char *fileContent;
 
-            fseek(temp_fp, 0, SEEK_END);
-            fileContent = (char *) malloc(sizeof(*fileContent) * ftell(temp_fp));
-            fseek(temp_fp, 0, SEEK_SET);
+            char buffer[BUFSIZ];
+            size_t chars_read = 0;
+            while ((chars_read = read(fileno(temp_fp), &buffer, sizeof(buffer))) > 0) {
+                if (command->redirects[1] != NULL) {
+                    write(fileno(trunc_fp), &buffer, chars_read);
+                }
 
-            fread(&fileContent, sizeof(fileContent), 1, temp_fp);
+                if (command->redirects[2] != NULL) {
+                    write(fileno(append_fp), &buffer, chars_read);
+                }
+
+                if (command->next) {
+                    write(child_to_parent_pipe[1], &buffer, sizeof(chars_read));
+                }
+            }
             fclose(temp_fp);
 
             if (command->redirects[1] != NULL) {
-                fwrite(&fileContent, sizeof(fileContent), 1, trunc_fp);
                 fclose(trunc_fp);
             }
             if (command->redirects[2] != NULL) {
-                fwrite(&fileContent, sizeof(fileContent), 1, append_fp);
                 fclose(append_fp);
             }
 
             if (command->next) {
-                // TODO: file content > 64kb case
-                write(child_to_parent_pipe[1], &fileContent, sizeof(fileContent));
                 close(child_to_parent_pipe[1]);
             }
-            free(fileContent);
+
             remove(temp_filename);
             return SUCCESS;
         }
         // we don't need to redirect to multiple files
         // directly run the execute_command
-    } else {
-        return execute_command(command);
     }
+
+    return execute_command(command);
+}
+
+// directly executes the given command
+int execvp_command(struct command_t *command) {
+    command->args = (char **) realloc(
+            command->args, sizeof(char *) * (command->arg_count += 2));
+    // shift everything forward by 1
+    for (int i = command->arg_count - 2; i > 0; --i)
+        command->args[i] = command->args[i - 1];
+
+    // set args[0] as a copy of name
+    command->args[0] = strdup(command->name);
+    // set args[arg_count-1] (last) to NULL
+    command->args[command->arg_count - 1] = NULL;
+    return execvp(command->name, command->args); // exec+args+path
 }
 
 // responsible for executing both built-in and external commands
 int execute_command(struct command_t *command) {
-    // TODO: add built-in commands
-    return execv_command(command);
+    // TODO: add builtin commands here
+    if (strcmp(command->name, "myjobs") == 0) {
+        char *current_user = getenv("USER");
+        command->name = "ps";
 
+        // myjobs does not accept any args
+        if (command->arg_count != 0) {
+            print_warning("myjobs does not accept any arguments, arguments are omitted");
+        }
+
+        // add 7 extra arguments for ps -U current_user -o pid,cmd,s
+        command->args = (char **) realloc(
+                command->args, sizeof(char *) * (command->arg_count = 4));
+
+        command->args[0] = "-U";
+        command->args[1] = current_user;
+        command->args[2] = "-o";
+        command->args[3] = "pid,cmd,s";
+
+
+        return execvp_command(command);
+    }
+
+    return execv_command(command);
 }
 
 // responsible for executing external commands
@@ -509,8 +576,6 @@ int execv_command(struct command_t *command) {
     command->args[0] = strdup(command->name);
     // set args[arg_count-1] (last) to NULL
     command->args[command->arg_count - 1] = NULL;
-
-    // execvp(command->name, command->args); // exec+args+path
     char *path = getenv("PATH");
     char *path_tokenizer = strtok(path, ":");
     while (path_tokenizer != NULL) {
@@ -523,6 +588,17 @@ int execv_command(struct command_t *command) {
     // If we reach here, we couldn't find the command on path
     printf("-%s: %s: command not found\n", sysname, command->name);
     return UNKNOWN;
+}
+
+
+void print_warning(char *message) {
+    fprintf(stderr, ANSI_COLOR_WARNING "Warning: %s" ANSI_COLOR_RESET, message);
+    fprintf(stderr, "\n");
+}
+
+void print_error(char *message) {
+    fprintf(stderr, ANSI_COLOR_ERROR "Error: %s" ANSI_COLOR_RESET, message);
+    fprintf(stderr, "\n");
 }
 
 void combine_path(char *result, char *directory, char *file) {
