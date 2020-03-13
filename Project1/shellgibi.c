@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
-
+#include <dirent.h>
 
 // ansi color codes
 // TODO: sahbaz https://bluesock.org/~willkg/dev/ansi.html
@@ -22,6 +22,7 @@ enum return_codes {
     UNKNOWN = 2,
     INVALID = 3
 };
+
 struct command_t {
     char *name;
     bool background;
@@ -32,9 +33,22 @@ struct command_t {
     struct command_t *next; // for piping
 };
 
+struct autocomplete_match {
+    int match_count;
+    char **matches;
+};
+
+
+char **all_available_commands;
+int number_of_available_commands;
+
+char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg"};
+
 void print_warning(char *message);
 
 void print_error(char *message);
+
+void combine_path(char *, char *, char *);
 
 /**
  * Prints a command struct
@@ -55,8 +69,6 @@ void print_command(struct command_t *command) {
         printf("\tPiped to:\n");
         print_command(command->next);
     }
-
-
 }
 
 /**
@@ -245,6 +257,7 @@ int prompt(struct command_t *command) {
         if (c == 9) // handle tab
         {
             buf[index++] = '?'; // autocomplete
+            // TODO: break yerine bastıralım
             break;
         }
 
@@ -304,7 +317,60 @@ int prompt(struct command_t *command) {
     return SUCCESS;
 }
 
-void combine_path(char *, char *, char *);
+int qstrcmp(const void *a, const void *b) {
+    return strcmp(*(const char **) a, *(const char **) b);
+}
+
+void load_all_available_commands() {
+    char *path = getenv("PATH");
+    int total_number_of_executables = sizeof(shellgibi_builtin_commands) / sizeof(shellgibi_builtin_commands[0]);
+    all_available_commands = malloc(total_number_of_executables * sizeof(char *));
+    memcpy(all_available_commands, shellgibi_builtin_commands, sizeof(shellgibi_builtin_commands));
+    char *file_name_buffer[65536];
+
+    int executables_in_dir;
+    char *path_tokenizer = strtok(path, ":");
+    while (path_tokenizer != NULL) {
+        DIR *directory;
+        struct dirent *directory_entry;
+        executables_in_dir = 0;
+        directory = opendir(path_tokenizer);
+        if (directory) {
+            while ((directory_entry = readdir(directory)) != NULL) {
+                if (directory_entry->d_name[0] == '.') {
+                    continue;
+                }
+                char full_path[strlen(path_tokenizer) + strlen(directory_entry->d_name) + 1];
+                combine_path(full_path, path_tokenizer, directory_entry->d_name);
+                if (access(full_path, X_OK) != 0) continue;
+                file_name_buffer[executables_in_dir++] = strdup(directory_entry->d_name);
+            }
+            closedir(directory);
+
+            if (executables_in_dir != 0) {
+                total_number_of_executables += executables_in_dir;
+                all_available_commands = realloc(all_available_commands,
+                                                 total_number_of_executables * sizeof(char *));
+                for (int i = 0; i < executables_in_dir; i++) {
+                    all_available_commands[total_number_of_executables - executables_in_dir + i] = file_name_buffer[i];
+                }
+            }
+        }
+        path_tokenizer = strtok(NULL, ":");
+    }
+
+    qsort(all_available_commands, total_number_of_executables, sizeof(char *), qstrcmp);
+
+    int unique_number_of_executables = 1;
+    for (int i = 1; i < total_number_of_executables; i++) {
+        if (strcmp(all_available_commands[i], all_available_commands[i - 1]) != 0) {
+            all_available_commands[unique_number_of_executables++] = all_available_commands[i];
+        }
+    }
+    all_available_commands = realloc(all_available_commands, sizeof(char *) * unique_number_of_executables);
+    number_of_available_commands = unique_number_of_executables;
+}
+
 
 int process_command(struct command_t *command, int parent_to_child_pipe[2]);
 
@@ -318,12 +384,16 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
 
 
 int main() {
+
+    load_all_available_commands();
+
     while (1) {
         struct command_t *command = malloc(sizeof(struct command_t));
         memset(command, 0, sizeof(struct command_t)); // set all bytes to 0
 
         int code;
         code = prompt(command);
+
         if (code == EXIT) break;
 
         code = process_command(command, NULL);
@@ -332,11 +402,46 @@ int main() {
         free_command(command);
     }
 
+    free(all_available_commands);
     printf("\n");
     return 0;
 }
 
+struct autocomplete_match *shellgibi_autocomplete(const char *input_str) {
+    int num_matches = 0;
+    char *command;
+    struct autocomplete_match *match = malloc(sizeof(struct autocomplete_match));
+    memset(match, 0, sizeof(struct autocomplete_match)); // set all bytes to 0
+
+    for (int i = 0; i < number_of_available_commands; i++) {
+        command = all_available_commands[i];
+        if (strncmp(command, input_str, strlen(input_str) - 1) == 0) {
+            if (num_matches == 0) {
+                match->matches = (char **) malloc(sizeof(char *));
+            } else {
+                match->matches = (char **) realloc(match->matches, sizeof(char *) * (num_matches + 1));
+            }
+            match->matches[num_matches] = (char *) malloc(strlen(command) + 1);
+            strcpy(match->matches[num_matches++], command);
+        }
+    }
+
+    match->match_count = num_matches;
+    return match;
+}
+
 int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
+
+    // auto complete
+    if (command->auto_complete) {
+        print_command(command);
+        struct autocomplete_match *match = shellgibi_autocomplete(command->name);
+        for (int i = 0; i < match->match_count; i++) {
+            printf("%s\n", match->matches[i]);
+        }
+        return SUCCESS;
+    }
+
     if (parent_to_child_pipe != NULL) {
         close(parent_to_child_pipe[1]);
     }
@@ -384,8 +489,7 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
             dup2(parent_to_child_pipe[0], STDIN_FILENO);
         }
         return process_command_child(command, child_to_parent_pipe);
-    }
-    else {
+    } else {
         // parent site
         if (parent_to_child_pipe != NULL) {
             close(parent_to_child_pipe[0]);
