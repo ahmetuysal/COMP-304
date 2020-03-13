@@ -706,6 +706,13 @@ int execute_command(struct command_t *command) {
         return SUCCESS;
     }
 
+    if (strcmp(command->name, "psvis") == 0) {
+        
+        int root_process = strtol(command->args[0], NULL, 10);
+        strcat("sudo insmod psvis.ko",root_process);
+        return SUCCESS;
+    }
+
     return execv_command(command);
 }
 
