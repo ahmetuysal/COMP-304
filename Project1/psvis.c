@@ -6,13 +6,15 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
+#include <linux/time.h>
 
 static int PID = -50;
+int **tree_pid, **tree_time;
 
 module_param(PID, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(myint, "Entered PID: \n");
 
-void DFS(struct task_struct *task, int **tree_array, int depth)
+void DFS(struct task_struct *task, int **tree_pid, int **tree_time, int depth)
 {   
     struct task_struct *child;
     struct list_head *list;
@@ -21,11 +23,13 @@ void DFS(struct task_struct *task, int **tree_array, int depth)
     for(; i<depth; i++) {
         printk(KERN_CONT "-");
     }
+    
     printk(KERN_CONT "PID: <%d>, Creation Time: %li\n", task->pid, task->start_time);
     list_for_each(list, &task->children) {
         child = list_entry(list, struct task_struct, sibling);
-        tree_array[depth+1][j] = (int) child->pid;
-        DFS(child, tree_array, depth+1);
+        tree_pid[depth+1][j] = (int) child->pid;
+        tree_time[depth+1][j] = (int) child->start_time;
+        DFS(child, tree_pid, tree_time, depth+1);
         j++;
     }
 }
@@ -44,20 +48,18 @@ int proc_init(void)
     else // valid PID
     {
         struct task_struct *task;
-        int **tree_array = kmalloc(100, GFP_KERNEL);
+        tree_pid = kmalloc(100 * sizeof(int*), GFP_KERNEL);
+        tree_time = kmalloc(100 * sizeof(int*), GFP_KERNEL);
         int i;
-        for (i = 0; i < 100; ++i) {
-            tree_array[i] = kmalloc(100, GFP_KERNEL);
+        for (i = 0; i < 100; i++) {
+            tree_pid[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
+            tree_time[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
         }
         // finding the task with given PID
         task = pid_task(find_vpid((pid_t)PID), PIDTYPE_PID);
-        tree_array[0][0] = (int) task->pid;
-        DFS(task,tree_array,0);
-        for (i = 0; i < 100; ++i) {
-            kfree(tree_array[i]);
-        }
-        kfree(tree_array);
-        //printk("1. dim size %d, 2. dim size %d",sizeof(tree_array)/sizeof(tree_array[0]),sizeof(tree_array[0])/sizeof(tree_array[0][0]));
+        tree_pid[0][0] = (int) task->pid;
+        tree_time[0][0] = (int) task->start_time;
+        DFS(task,tree_pid,tree_time,0);
     }
 
     return 0;
@@ -66,6 +68,13 @@ int proc_init(void)
 /* This function is called when the module is removed. */
 void proc_exit(void)
 {
+    int i;
+    for (i = 0; i < 100; i++) {
+        kfree(tree_pid[i]);
+        kfree(tree_time[i]);
+    }
+    kfree(tree_pid);
+    kfree(tree_time);
     printk(KERN_INFO "Removing Module\n");
 }
 /* Macros for registering module entry and exit points. */
