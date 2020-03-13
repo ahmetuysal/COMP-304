@@ -82,5 +82,5 @@ module_init(proc_init);
 module_exit(proc_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Process Module");
-MODULE_AUTHOR("Furkan Sahbaz");
+MODULE_DESCRIPTION("psvis command");
+MODULE_AUTHOR("Furkan Sahbaz and Ahmet Uysal");
