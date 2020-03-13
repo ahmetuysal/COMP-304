@@ -808,6 +808,7 @@ int execvp_command(struct command_t *command) {
 
 // responsible for executing both built-in and external commands
 int execute_command(struct command_t *command) {
+    
     if (strcmp(command->name, "myjobs") == 0) {
         // myjobs does not accept any args
         if (command->arg_count != 0) {
@@ -860,10 +861,37 @@ int execute_command(struct command_t *command) {
     }
 
     if (strcmp(command->name, "psvis") == 0) {
-        
-        int root_process = strtol(command->args[0], NULL, 10);
-        strcat("sudo insmod psvis.ko",root_process);
+        long root_process = strtol(command->args[0], NULL, 10);
+        char temp1[50], temp2[50];
+
+        strcpy(temp1,"PID=");
+        sprintf(temp2,"%d",(int) root_process);
+        strcat(temp1,temp2);
+
+        command->args = (char **) realloc(
+                command->args, sizeof(char) * (command->arg_count = 3));
+
+        command->name = "sudo";
+        command->args[0] = "insmod";
+        command->args[1] = "psvis.ko";
+        command->args[2] = temp1;
+        printf("%s %s %s\n",command->args[0],command->args[1],command->args[2]);
+        execvp_command(command);
+        // TODO: need to fork here since execvp needs to be called more than once. 
+        command->args[0] = "rmmod";
+        command->args[1] = "psvis";
+        command->args[2] = NULL;
+        command->arg_count--;
+        printf("%s %s %s\n",command->args[0],command->args[1],command->args[2]);
+        execvp_command(command);
+
+        command->args = NULL;
+        command->arg_count = 0;
+        command->name = "dmesg";
+        execvp_command(command);
+
         return SUCCESS;
+
     }
 
     return execv_command(command);
