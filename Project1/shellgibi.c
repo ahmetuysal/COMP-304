@@ -45,6 +45,8 @@ char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg"};
 
 struct autocomplete_match *shellgibi_autocomplete(const char *input_str);
 
+struct autocomplete_match *filename_autocomplete(const char *input_str);
+
 char *get_command_name(char *buf);
 
 void print_warning(char *message);
@@ -145,6 +147,49 @@ char *get_command_name(char *buf) {
         return strdup(pch);
 }
 
+int should_complete_filename(char *buf, char *filename_start) {
+    const char *splitters = " \t"; // split at whitespace
+    int len;
+    len = strlen(buf);
+    while (len > 0 && strchr(splitters, buf[0]) != NULL) // trim left whitespace
+    {
+        buf++;
+        len--;
+    }
+    int have_spaces_at_the_end = 0;
+    while (len > 0 && strchr(splitters, buf[len - 1]) != NULL) {
+        buf[--len] = 0; // trim right whitespace
+        have_spaces_at_the_end = 1;
+    }
+
+    char *pch = strtok(buf, splitters);
+
+    // empty string
+    if (pch == NULL)
+        return 0;
+
+    // at least the command and a space is entered
+    if (have_spaces_at_the_end) {
+        filename_start[0] = '\0';
+        return 1;
+    }
+
+    pch = strtok(NULL, splitters);
+    // we only have the command part without empty string
+    // it could be unfinished
+    if (pch == NULL)
+        return 0;
+
+    char *last_token = pch;
+
+    while ((pch = strtok(NULL, splitters)) != NULL) {
+        printf("Last token %s", last_token);
+        last_token = pch;
+    }
+
+    strcpy(filename_start, last_token);
+    return 1;
+}
 
 /**
  * Parse a command string into a command struct
@@ -263,6 +308,7 @@ int prompt(struct command_t *command) {
     char c;
     char buf[4096];
     static char oldbuf[4096];
+    char filename_buf[4096];
 
     // tcgetattr gets the parameters of the current terminal
     // STDIN_FILENO will tell tcgetattr that it should write the settings
@@ -287,32 +333,62 @@ int prompt(struct command_t *command) {
 
         if (c == 9) // handle tab
         {
-            // TODO: autocomplete command filename
+            if (index == 0) {
+                continue;
+            }
+            buf[index] = '\0';
 
-            // auto complete command
-            buf[index + 1] = '\0';
-            char *command_name = get_command_name(buf);
-            struct autocomplete_match *match = shellgibi_autocomplete(command_name);
-            if (match->match_count == 1) {
-                // complete the command
-                int input_command_len = strlen(command_name);
-                int match_len = strlen(match->matches[0]);
+            struct autocomplete_match *match;
+            int is_filename = should_complete_filename(strdup(buf), filename_buf);
 
-                if (match_len != input_command_len) {
-                    for (int i = input_command_len; i < match_len; i++) {
-                        putchar(match->matches[0][i]); // echo the character
-                        buf[index++] = match->matches[0][i];
+            if (is_filename) {
+                match = filename_autocomplete(filename_buf);
+                if (match->match_count == 1) {
+                    // complete the command
+                    int input_filename_len = strlen(filename_buf);
+                    int match_len = strlen(match->matches[0]);
+
+                    if (match_len != input_filename_len) {
+                        for (int i = input_filename_len; i < match_len; i++) {
+                            putchar(match->matches[0][i]); // echo the character
+                            buf[index++] = match->matches[0][i];
+                        }
                     }
+                    c = ' ';
+                } else if (match->match_count > 1) {
+                    printf("\n");
+                    for (int i = 0; i < match->match_count; i++) {
+                        printf("%s\t", match->matches[i]);
+                    }
+                    printf("\n");
+                    show_prompt();
+                    printf("%s", buf);
                 }
-                c = ' ';
-            } else if (match->match_count > 1) {
-                printf("\n");
-                for (int i = 0; i < match->match_count; i++) {
-                    printf("%s\t", match->matches[i]);
+            } else {
+                // auto complete command
+                char *command_name = get_command_name(strdup(buf));
+                match = shellgibi_autocomplete(command_name);
+                if (match->match_count == 1) {
+                    // complete the command
+                    int input_command_len = strlen(command_name);
+                    int match_len = strlen(match->matches[0]);
+
+                    if (match_len != input_command_len) {
+                        for (int i = input_command_len; i < match_len; i++) {
+                            putchar(match->matches[0][i]); // echo the character
+                            buf[index++] = match->matches[0][i];
+                        }
+                    }
+                    c = ' ';
+                } else if (match->match_count > 1) {
+                    printf("\n");
+                    for (int i = 0; i < match->match_count; i++) {
+                        printf("%s\t", match->matches[i]);
+                    }
+                    printf("\n");
+                    show_prompt();
+                    printf("%s", buf);
                 }
-                printf("\n");
-                show_prompt();
-                printf("%s", buf);
             }
             free_autocomplete_match(match);
             if (c == 9) {
@@ -483,6 +559,36 @@ struct autocomplete_match *shellgibi_autocomplete(const char *input_str) {
             match->matches[num_matches] = (char *) malloc(strlen(command) + 1);
             strcpy(match->matches[num_matches++], command);
         }
+    }
+
+    match->match_count = num_matches;
+    return match;
+}
+
+
+struct autocomplete_match *filename_autocomplete(const char *input_str) {
+    int num_matches = 0;
+    struct autocomplete_match *match = malloc(sizeof(struct autocomplete_match));
+    memset(match, 0, sizeof(struct autocomplete_match)); // set all bytes to 0
+
+    DIR *directory = opendir(".");
+    struct dirent *directory_entry;
+    if (directory) {
+        while ((directory_entry = readdir(directory)) != NULL) {
+            if (directory_entry->d_name[0] == '.') {
+                continue;
+            }
+            if (strncmp(directory_entry->d_name, input_str, strlen(input_str)) == 0) {
+                if (num_matches == 0) {
+                    match->matches = (char **) malloc(sizeof(char *));
+                } else {
+                    match->matches = (char **) realloc(match->matches, sizeof(char *) * (num_matches + 1));
+                }
+                match->matches[num_matches] = (char *) malloc(strlen(directory_entry->d_name) + 1);
+                strcpy(match->matches[num_matches++], directory_entry->d_name);
+            }
+        }
+        closedir(directory);
     }
 
     match->match_count = num_matches;
