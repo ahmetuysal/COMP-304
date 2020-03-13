@@ -386,8 +386,6 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         return process_command_child(command, child_to_parent_pipe);
     }
     else {
-        printf("Command is %s argument count is %d\n", command->name, command->arg_count);
-        print_command(command);
         // parent site
         if (parent_to_child_pipe != NULL) {
             close(parent_to_child_pipe[0]);
@@ -398,9 +396,6 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
             close(child_to_parent_pipe[1]);
         }
 
-        if (!command->background || command->next) {
-            waitpid(pid, NULL, 0); // wait for child process to finish
-        }
 
         // TODO: myfg bring command to foreground
         // TODO: why does it not go into here?
@@ -408,16 +403,16 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
             long process_pid = strtol(command->args[0], NULL, 10);
             printf("Parent is in myfg %ld\n", process_pid);
             int status;
-
             while (true) {
-                waitpid(process_pid, &status, 0);
-                printf("Print pid return with status: %d\n", status);
-                if (WIFEXITED(status)) {
+                status = kill(process_pid, 0);
+                if (status == -1 && errno == ESRCH) {
+                    printf("Status is %d, errno is %d\n", status, errno);
                     break;
                 }
             }
+        } else if (!command->background || command->next) {
+            waitpid(pid, NULL, 0); // wait for child process to finish
         }
-
 
         if (command->next) {
             // how to transfer pipe data?
