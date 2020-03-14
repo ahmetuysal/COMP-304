@@ -872,37 +872,55 @@ int execute_command(struct command_t *command) {
     }
 
     if (strcmp(command->name, "psvis") == 0) {
+
         long root_process = strtol(command->args[0], NULL, 10);
         char temp1[50], temp2[50];
+        pid_t pid_s1 = fork();
 
-        strcpy(temp1,"PID=");
-        sprintf(temp2,"%d",(int) root_process);
-        strcat(temp1,temp2);
-
-        command->args = (char **) realloc(
+        if (pid_s1 == 0) //child process
+        {
+            
+            strcpy(temp1,"PID=");
+            sprintf(temp2,"%d",(int) root_process);
+            strcat(temp1,temp2);
+            
+            command->name = "sudo";
+            command->args = (char **) realloc(
                 command->args, sizeof(char) * (command->arg_count = 3));
 
-        command->name = "sudo";
-        command->args[0] = "insmod";
-        command->args[1] = "psvis.ko";
-        command->args[2] = temp1;
-        printf("%s %s %s\n",command->args[0],command->args[1],command->args[2]);
-        execvp_command(command);
-        // TODO: need to fork here since execvp needs to be called more than once. 
-        command->args[0] = "rmmod";
-        command->args[1] = "psvis";
-        command->args[2] = NULL;
-        command->arg_count--;
-        printf("%s %s %s\n",command->args[0],command->args[1],command->args[2]);
-        execvp_command(command);
+            command->args[0] = "insmod";
+            command->args[1] = "psvis.ko";
+            command->args[2] = temp1;
 
-        command->args = NULL;
-        command->arg_count = 0;
-        command->name = "dmesg";
-        execvp_command(command);
+            execvp_command(command);
+        } else {
+            waitpid(pid_s1, NULL, 0); // wait for child process to finish
+            pid_t pid_s2 = fork();
+            if (pid_s2 == 0) { // child process
+                command->args = (char **) malloc(sizeof(char *));
+                command->arg_count = 2;
+                command->name = "sudo";
+                command->args[0] = "rmmod";
+                command->args[1] = "psvis";
+                print_command(command);
+                execvp_command(command);
+            } else {
+                waitpid(pid_s2, NULL, 0); // wait for child process to finish
 
-        return SUCCESS;
+                //TODO: handle obtaining process array and prinntting it here.
 
+                exit(SUCCESS);
+            }
+        }
+
+    }
+
+    if (strcmp(command->name, "alarm") == 0) {
+        // TODO: implement using crontab/
+
+
+
+        exit(SUCCESS);
     }
 
     return execv_command(command);
