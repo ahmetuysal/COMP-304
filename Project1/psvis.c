@@ -38,7 +38,7 @@ void DFS(struct task_struct *task, int **tree_pid, int **tree_time, int depth)
 /* This function is called when the module is loaded. */
 int proc_init(void)
 {
-    printk(KERN_INFO "Loading Module\n");
+    printk(KERN_INFO "----- PSVIS -----\n");
     // checking the given PID
     if (PID < 0)
     {
@@ -75,12 +75,12 @@ void proc_exit(void)
     }
     kfree(tree_pid);
     kfree(tree_time);
-    printk(KERN_INFO "Removing Module\n");
+    //printk(KERN_INFO "Removing Module\n");
 }
 /* Macros for registering module entry and exit points. */
 module_init(proc_init);
 module_exit(proc_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("psvis command");
+MODULE_DESCRIPTION("psvis module");
 MODULE_AUTHOR("Furkan Sahbaz and Ahmet Uysal");
