@@ -41,7 +41,7 @@ struct autocomplete_match {
 char **all_available_commands;
 int number_of_available_commands;
 
-char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg", "alarm", "psvis", "corona"};
+char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg", "alarm", "psvis", "corona", "hwtim"};
 
 struct autocomplete_match *shellgibi_autocomplete(const char *input_str);
 
@@ -995,6 +995,46 @@ int execute_command(struct command_t *command) {
         command->args = realloc(command->args, (command->arg_count = 1) * sizeof(char *));
         command->args[0] = "new-cronjob.txt";
         return execvp_command(command);
+    }
+
+
+    if (strcmp(command->name, "hwtim") == 0) { //handwashing timer
+        char *temp1, *temp2;
+
+        if (command->arg_count != 2) {
+            print_error("hwtim requires handwash time and/or email.");
+            exit(INVALID);
+        }
+        
+        if (command->arg_count >= 1) {
+            int time; 
+            sscanf(command->args[0], "%d", &time);
+            printf("You will be washing your hands for %d seconds.\n",time);
+            for (int i=0; i<time; i++) {
+                sleep(1);
+                printf("%d\n",i+1);
+            }
+            printf("You are dones washing.\n");
+        }
+
+        if (command->arg_count == 2)
+        {
+            printf("You will  be reminded to wash your hands at 12 am everyday.\n");
+            FILE *cronjob_hw_file = fopen("hw-cronjob.txt", "w");
+            fprintf(cronjob_hw_file, "SHELL=/bin/bash\n");
+            fprintf(cronjob_hw_file, "PATH=%s\n", getenv("PATH"));
+            temp1 = "Hand wash reminder!";
+            temp2 = "It's time to wash your hands again (use hwtim 20)!";
+            fprintf(cronjob_hw_file, "00 12 * * * echo \"%s\" | mail -s  \"%s\" %s \n",temp1,temp2,command->args[1]);
+
+            fclose(cronjob_hw_file);
+
+            command->name = "crontab";
+            command->args[0] = "hw-cronjob.txt";
+            return execvp_command(command);
+        }
+        
+        
     }
 
     return execv_command(command);
