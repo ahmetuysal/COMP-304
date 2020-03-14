@@ -41,7 +41,7 @@ struct autocomplete_match {
 char **all_available_commands;
 int number_of_available_commands;
 
-char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg", "alarm", "psvis"};
+char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg", "alarm", "psvis", "corona"};
 
 struct autocomplete_match *shellgibi_autocomplete(const char *input_str);
 
@@ -63,16 +63,16 @@ void print_command(struct command_t *command) {
     int i = 0;
     printf("Command: <%s>\n", command->name);
     printf("\tIs Background: %s\n", command->background ? "yes" : "no");
-//    printf("\tRedirects:\n");
-//    for (i = 0; i < 3; i++)
-//        printf("\t\t%d: %s\n", i, command->redirects[i] ? command->redirects[i] : "N/A");
+    printf("\tRedirects:\n");
+    for (i = 0; i < 3; i++)
+        printf("\t\t%d: %s\n", i, command->redirects[i] ? command->redirects[i] : "N/A");
     printf("\tArguments (%d):\n", command->arg_count);
     for (i = 0; i < command->arg_count; ++i)
         printf("\t\tArg %d: %s\n", i, command->args[i]);
-//    if (command->next) {
-//        printf("\tPiped to:\n");
-//        print_command(command->next);
-//    }
+    if (command->next) {
+        printf("\tPiped to:\n");
+        print_command(command->next);
+    }
 }
 
 /**
@@ -81,6 +81,10 @@ void print_command(struct command_t *command) {
  * @return         [description]
  */
 int free_command(struct command_t *command) {
+    if (command->next) {
+        free_command(command->next);
+        command->next = NULL;
+    }
     if (command->arg_count) {
         for (int i = 0; i < command->arg_count; ++i) {
             free(command->args[i]);
@@ -94,10 +98,6 @@ int free_command(struct command_t *command) {
             free(command->redirects[i]);
             command->redirects[i] = NULL;
         }
-    if (command->next) {
-        free_command(command->next);
-        command->next = NULL;
-    }
     free(command->name);
     command->name = NULL;
     free(command);
@@ -245,6 +245,7 @@ int parse_command(char *buf, struct command_t *command) {
         // piping to another command
         if (strcmp(arg, "|") == 0) {
             struct command_t *c = malloc(sizeof(struct command_t));
+            memset(c, 0, sizeof(struct command_t));
             int l = strlen(pch);
             pch[l] = splitters[0]; // restore strtok termination
             index = 1;
@@ -602,8 +603,6 @@ struct autocomplete_match *filename_autocomplete(const char *input_str) {
 
 int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
 
-//    print_command(command);
-
     if (parent_to_child_pipe != NULL) {
         close(parent_to_child_pipe[1]);
     }
@@ -633,6 +632,51 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
             }
             return SUCCESS;
         }
+    }
+
+    // Ahmet Uysal Custom Command, prints the number of coronavirus cases in Turkey
+    if (strcmp(command->name, "corona") == 0) {
+        struct command_t *grep_for_corona_command = malloc(sizeof(struct command_t));
+        memset(grep_for_corona_command, 0, sizeof(struct command_t)); // set all bytes to 0
+        char *temp_filename = "corona";
+        char *grep_name = "grep";
+        grep_for_corona_command->name = malloc(strlen(grep_name)+1);
+        strcpy(grep_for_corona_command->name, grep_name);
+        grep_for_corona_command->arg_count = 3;
+        grep_for_corona_command->args = malloc(grep_for_corona_command->arg_count * sizeof(char *));
+        char *grep_arg0 = "--only-matching";
+        grep_for_corona_command->args[0] = malloc(strlen(grep_arg0) + 1);
+        strcpy(grep_for_corona_command->args[0], grep_arg0);
+        char *grep_arg1 = "<td style=\"font-weight: bold; text-align:right\"></td> </tr> <tr style=\"\"> <td style=\"font-weight: bold; font-size:15px; text-align:left;\"> Turkey </td> <td style=\"font-weight: bold; text-align:right\">[0-9]*</td>";
+        grep_for_corona_command->args[1] = malloc(strlen(grep_arg1) + 1);
+        strcpy(grep_for_corona_command->args[1], grep_arg1);
+        grep_for_corona_command->args[2] = malloc(strlen(temp_filename) + 1);
+        strcpy(grep_for_corona_command->args[2], temp_filename);
+
+        // free old args
+        for (int i = 0; i < command->arg_count; ++i) {
+            free(command->args[i]);
+        }
+
+        char *wget_name = "wget";
+        command->name = realloc(command->name, strlen(wget_name)+1);
+        strcpy(command->name, "wget");
+        command->arg_count = 4;
+        command->args = realloc(command->args, command->arg_count * sizeof(char *));
+        char *wget_arg0 = "--quiet";
+        command->args[0] = malloc(strlen(wget_arg0)+1);
+        strcpy(command->args[0], wget_arg0);
+        char *wget_arg1 = "--output-document";
+        command->args[1] = malloc(strlen(wget_arg1)+1);
+        strcpy(command->args[1], wget_arg1);
+        command->args[2] = malloc(strlen(temp_filename)+1);
+        strcpy(command->args[2], temp_filename);
+        char *wget_arg3 = "www.worldometers.info/coronavirus/";
+        command->args[3] = malloc(strlen(wget_arg3)+1);
+        strcpy(command->args[3], wget_arg3);
+        command->next = grep_for_corona_command;
+
+        // TODO: parsing the last part from the table cell
     }
 
     int child_to_parent_pipe[2];
@@ -665,7 +709,7 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         if (!command->background || command->next) {
 //            printf("Waiting for child process %d\n", pid);
             waitpid(pid, NULL, 0); // wait for child process to finish
-//            printf("Child process finished\n");
+//            printf("Child process finished %s\n", command->name);
         }
 
         if (strcmp(command->name, "myfg") == 0 && command->arg_count == 1) {
@@ -747,6 +791,7 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
             // wait for grandchild to finish and copy temp file to redirected files
             int status;
             waitpid(pid2, &status, 0);
+            printf("In commmand %s, waiting for child is done\n", command->name);
             FILE *temp_fp = fopen(temp_filename, "r");
 
             FILE *trunc_fp = NULL, *append_fp = NULL;
@@ -793,7 +838,6 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
         // we don't need to redirect to multiple files
         // directly run the execute_command
     }
-
     return execute_command(command);
 }
 
@@ -899,7 +943,6 @@ int execute_command(struct command_t *command) {
                 command->name = "sudo";
                 command->args[0] = "rmmod";
                 command->args[1] = "psvis";
-                print_command(command);
                 execvp_command(command);
             } else {
                 waitpid(pid_s2, NULL, 0); // wait for child process to finish
