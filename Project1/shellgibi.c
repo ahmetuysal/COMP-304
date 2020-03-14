@@ -63,16 +63,16 @@ void print_command(struct command_t *command) {
     int i = 0;
     printf("Command: <%s>\n", command->name);
     printf("\tIs Background: %s\n", command->background ? "yes" : "no");
-    printf("\tRedirects:\n");
-    for (i = 0; i < 3; i++)
-        printf("\t\t%d: %s\n", i, command->redirects[i] ? command->redirects[i] : "N/A");
+//    printf("\tRedirects:\n");
+//    for (i = 0; i < 3; i++)
+//        printf("\t\t%d: %s\n", i, command->redirects[i] ? command->redirects[i] : "N/A");
     printf("\tArguments (%d):\n", command->arg_count);
     for (i = 0; i < command->arg_count; ++i)
         printf("\t\tArg %d: %s\n", i, command->args[i]);
-    if (command->next) {
-        printf("\tPiped to:\n");
-        print_command(command->next);
-    }
+//    if (command->next) {
+//        printf("\tPiped to:\n");
+//        print_command(command->next);
+//    }
 }
 
 /**
@@ -124,6 +124,7 @@ int show_prompt() {
     char cwd[1024], hostname[1024];
     gethostname(hostname, sizeof(hostname));
     getcwd(cwd, sizeof(cwd));
+//    printf("Mypid is %d\n", getpid());
     printf("%s@%s:%s %s$ ", getenv("USER"), hostname, cwd, sysname);
     return 0;
 }
@@ -330,16 +331,17 @@ int prompt(struct command_t *command) {
     buf[0] = 0;
     while (1) {
         c = getchar();
-
+        // printf("Keycode: %u\n", c); // DEBUG: uncomment for debugging
         if (c == 9) // handle tab
         {
             if (index == 0) {
                 continue;
             }
-            buf[index] = '\0';
+            char* buf_dup = strdup(buf);
+            buf_dup[index] = '\0';
 
             struct autocomplete_match *match;
-            int is_filename = should_complete_filename(strdup(buf), filename_buf);
+            int is_filename = should_complete_filename(buf_dup, filename_buf);
 
             if (is_filename) {
                 match = filename_autocomplete(filename_buf);
@@ -366,7 +368,9 @@ int prompt(struct command_t *command) {
                 }
             } else {
                 // auto complete command
-                char *command_name = get_command_name(strdup(buf));
+                buf_dup = strdup(buf);
+                buf_dup[index] = '\0';
+                char *command_name = get_command_name(buf_dup);
                 match = shellgibi_autocomplete(command_name);
                 if (match->match_count == 1) {
                     // complete the command
@@ -425,9 +429,9 @@ int prompt(struct command_t *command) {
                 buf[i] = oldbuf[i];
             }
             index = i;
-            continue;
-        } else
             multicode_state = 0;
+            continue;
+        }
 
         putchar(c); // echo the character
         buf[index++] = c;
@@ -439,7 +443,7 @@ int prompt(struct command_t *command) {
     }
     if (index > 0 && buf[index - 1] == '\n') // trim newline from the end
         index--;
-    buf[index++] = 0; // null terminate string
+    buf[index] = '\0'; // null terminate string
 
     strcpy(oldbuf, buf);
 
@@ -521,6 +525,7 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
 int main() {
 
     load_all_available_commands();
+    signal(SIGCHLD, SIG_IGN);
 
     while (1) {
         struct command_t *command = malloc(sizeof(struct command_t));
@@ -596,6 +601,9 @@ struct autocomplete_match *filename_autocomplete(const char *input_str) {
 }
 
 int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
+
+//    print_command(command);
+
     if (parent_to_child_pipe != NULL) {
         close(parent_to_child_pipe[1]);
     }
@@ -654,22 +662,23 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
             close(child_to_parent_pipe[1]);
         }
 
+        if (!command->background || command->next) {
+//            printf("Waiting for child process %d\n", pid);
+            waitpid(pid, NULL, 0); // wait for child process to finish
+//            printf("Child process finished\n");
+        }
 
-        // TODO: myfg bring command to foreground
-        // TODO: why does it not go into here?
         if (strcmp(command->name, "myfg") == 0 && command->arg_count == 1) {
             long process_pid = strtol(command->args[0], NULL, 10);
-            printf("Parent is in myfg %ld\n", process_pid);
+//            printf("Parent is in myfg %ld\n", process_pid);
             int status;
             while (true) {
                 status = kill(process_pid, 0);
                 if (status == -1 && errno == ESRCH) {
-                    printf("Status is %d, errno is %d\n", status, errno);
+//                    printf("Child is gone!\n");
                     break;
                 }
             }
-        } else if (!command->background || command->next) {
-            waitpid(pid, NULL, 0); // wait for child process to finish
         }
 
         if (command->next) {
@@ -803,7 +812,9 @@ int execvp_command(struct command_t *command) {
     command->args[0] = strdup(command->name);
     // set args[arg_count-1] (last) to NULL
     command->args[command->arg_count - 1] = NULL;
-    return execvp(command->name, command->args); // exec+args+path
+    execvp(command->name, command->args); // exec+args+path
+    fprintf(stderr, ANSI_COLOR_ERROR "Error: In execvp call to command: %s\n" ANSI_COLOR_RESET, command->name);
+    _exit(1);
 }
 
 // responsible for executing both built-in and external commands
@@ -832,32 +843,32 @@ int execute_command(struct command_t *command) {
     if (strcmp(command->name, "pause") == 0) {
         if (command->arg_count != 1) {
             print_error("pause requires only one argument <PID>");
-            return INVALID;
+            exit(INVALID);
         }
         long process_pid = strtol(command->args[0], NULL, 10);
         kill(process_pid, SIGSTOP);
-        return SUCCESS;
+        exit(SUCCESS);
     }
 
     if (strcmp(command->name, "mybg") == 0) {
         if (command->arg_count != 1) {
             print_error("mybg requires only one argument <PID>");
-            return INVALID;
+            exit(INVALID);
         }
         long process_pid = strtol(command->args[0], NULL, 10);
         kill(process_pid, SIGCONT);
-        return SUCCESS;
+        exit(SUCCESS);
     }
 
     if (strcmp(command->name, "myfg") == 0) {
         if (command->arg_count != 1) {
             print_error("myfg requires only one argument <PID>");
-            return INVALID;
+            exit(INVALID);
         }
 
         long process_pid = strtol(command->args[0], NULL, 10);
         kill(process_pid, SIGCONT);
-        return SUCCESS;
+        exit(SUCCESS);
     }
 
     if (strcmp(command->name, "psvis") == 0) {
