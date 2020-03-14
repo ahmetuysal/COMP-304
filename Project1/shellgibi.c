@@ -889,7 +889,7 @@ int execute_command(struct command_t *command) {
             command->args[1] = "psvis.ko";
             command->args[2] = temp1;
 
-            execvp_command(command);
+            return execvp_command(command);
         } else {
             waitpid(pid_s1, NULL, 0); // wait for child process to finish
             pid_t pid_s2 = fork();
@@ -899,14 +899,23 @@ int execute_command(struct command_t *command) {
                 command->name = "sudo";
                 command->args[0] = "rmmod";
                 command->args[1] = "psvis";
-                print_command(command);
-                execvp_command(command);
+                return execvp_command(command);
             } else {
                 waitpid(pid_s2, NULL, 0); // wait for child process to finish
-
-                //TODO: handle obtaining process array and prinntting it here.
-
-                exit(SUCCESS);
+                pid_t pid_d = fork();
+                if (pid_d == 0) { // child process
+                    command->args = (char **) malloc(sizeof(char *));
+                    command->arg_count = 2;
+                    command->name = "sudo";
+                    command->args[0] = "dmesg";
+                    command->args[1] = "-c";
+                    //command->arg_count = 0;
+                    //print_command(command);
+                    return execvp_command(command);
+                } else {
+                    waitpid(pid_d,NULL,0);
+                    exit(SUCCESS);
+                }
             }
         }
 
