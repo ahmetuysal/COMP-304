@@ -41,7 +41,7 @@ struct autocomplete_match {
 char **all_available_commands;
 int number_of_available_commands;
 
-char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg"};
+char *shellgibi_builtin_commands[] = {"myjobs", "pause", "mybg", "myfg", "alarm", "psvis"};
 
 struct autocomplete_match *shellgibi_autocomplete(const char *input_str);
 
@@ -337,7 +337,7 @@ int prompt(struct command_t *command) {
             if (index == 0) {
                 continue;
             }
-            char* buf_dup = strdup(buf);
+            char *buf_dup = strdup(buf);
             buf_dup[index] = '\0';
 
             struct autocomplete_match *match;
@@ -721,17 +721,14 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
 
     // >: output is written to a file, in write mode
     if (!stdout_redirected_to_multiple_files && command->redirects[1] != NULL) {
-        // TODO: this is not working
         freopen(command->redirects[1], "w", stdout);
         freopen(command->redirects[1], "w", stderr);
     }
         // >>: output is written to a file, in append mode
     else if (!stdout_redirected_to_multiple_files && command->redirects[2] != NULL) {
-        // TODO: this is not working
         freopen(command->redirects[2], "a", stdout);
         freopen(command->redirects[2], "a", stderr);
     } else if (!stdout_redirected_to_multiple_files && command->next) {
-        // TODO: this is not working
         dup2(child_to_parent_pipe[1], STDOUT_FILENO);
         dup2(child_to_parent_pipe[1], STDERR_FILENO);
         close(child_to_parent_pipe[1]);
@@ -819,7 +816,7 @@ int execvp_command(struct command_t *command) {
 
 // responsible for executing both built-in and external commands
 int execute_command(struct command_t *command) {
-    
+
     if (strcmp(command->name, "myjobs") == 0) {
         // myjobs does not accept any args
         if (command->arg_count != 0) {
@@ -879,14 +876,14 @@ int execute_command(struct command_t *command) {
 
         if (pid_s1 == 0) //child process
         {
-            
-            strcpy(temp1,"PID=");
-            sprintf(temp2,"%d",(int) root_process);
-            strcat(temp1,temp2);
-            
+
+            strcpy(temp1, "PID=");
+            sprintf(temp2, "%d", (int) root_process);
+            strcat(temp1, temp2);
+
             command->name = "sudo";
             command->args = (char **) realloc(
-                command->args, sizeof(char) * (command->arg_count = 3));
+                    command->args, sizeof(char) * (command->arg_count = 3));
 
             command->args[0] = "insmod";
             command->args[1] = "psvis.ko";
@@ -916,11 +913,35 @@ int execute_command(struct command_t *command) {
     }
 
     if (strcmp(command->name, "alarm") == 0) {
-        // TODO: implement using crontab/
+        if (command->arg_count != 2) {
+            print_error("alarm requires two arguments <HH.MM> <music_file>");
+            exit(INVALID);
+        }
 
+        char *hour = strtok(command->args[0], ".");
+        if (hour == NULL) {
+            print_error("invalid hour argument");
+            exit(INVALID);
+        }
 
+        char *minute = strtok(NULL, ".");
 
-        exit(SUCCESS);
+        if (minute == NULL) {
+            print_error("invalid minute argument");
+            exit(INVALID);
+        }
+
+        FILE *cronjob_file = fopen("new-cronjob.txt", "w");
+        fprintf(cronjob_file, "SHELL=/bin/bash\n");
+        fprintf(cronjob_file, "PATH=%s\n", getenv("PATH"));
+        fprintf(cronjob_file, "%s %s * * * aplay %s\n", minute, hour, command->args[1]);
+
+        fclose(cronjob_file);
+
+        command->name = "crontab";
+        command->args = realloc(command->args, (command->arg_count = 1) * sizeof(char *));
+        command->args[0] = "new-cronjob.txt";
+        return execvp_command(command);
     }
 
     return execv_command(command);
