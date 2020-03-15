@@ -24,7 +24,7 @@ void DFS(struct task_struct *task, int **tree_pid, int **tree_time, int depth)
         printk(KERN_CONT "-");
     }
     
-    printk(KERN_CONT "PID: <%d>, Creation Time: %li\n", task->pid, task->start_time);
+    printk(KERN_CONT "PID: %d, Creation Time: %d\n", task->pid, task->start_time);
     list_for_each(list, &task->children) {
         child = list_entry(list, struct task_struct, sibling);
         tree_pid[depth+1][j] = (int) child->pid;
@@ -51,10 +51,10 @@ int proc_init(void)
         tree_pid = kmalloc(100 * sizeof(int*), GFP_KERNEL);
         tree_time = kmalloc(100 * sizeof(int*), GFP_KERNEL);
         int i;
-        //for (i = 0; i < 100; i++) {
-        //    tree_pid[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
-        //    tree_time[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
-        //}
+        for (i = 0; i < 100; i++) {
+            tree_pid[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
+            tree_time[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
+        }
         // finding the task with given PID
         task = pid_task(find_vpid((pid_t)PID), PIDTYPE_PID);
         tree_pid[0][0] = (int) task->pid;
@@ -82,5 +82,5 @@ module_init(proc_init);
 module_exit(proc_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("pPSVIS Module");
+MODULE_DESCRIPTION("PSVIS Module");
 MODULE_AUTHOR("Ahmet Uysal & Furkan Sahbaz");
