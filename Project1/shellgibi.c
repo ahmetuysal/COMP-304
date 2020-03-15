@@ -526,6 +526,7 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
 int main() {
 
     load_all_available_commands();
+    // ignore signals from childred to prevent orphan processes
     signal(SIGCHLD, SIG_IGN);
 
     while (1) {
@@ -694,16 +695,17 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
     if (strcmp(command->name, "corona") == 0) {
         struct command_t *grep_for_corona_command = malloc(sizeof(struct command_t));
         memset(grep_for_corona_command, 0, sizeof(struct command_t)); // set all bytes to 0
-        char *temp_filename = "corona";
+        char temp_filename[16 + 1];
+        tmpnam(temp_filename);
         char *grep_name = "grep";
         grep_for_corona_command->name = malloc(strlen(grep_name)+1);
         strcpy(grep_for_corona_command->name, grep_name);
         grep_for_corona_command->arg_count = 3;
         grep_for_corona_command->args = malloc(grep_for_corona_command->arg_count * sizeof(char *));
-        char *grep_arg0 = "--only-matching";
+        char *grep_arg0 = "-Po";
         grep_for_corona_command->args[0] = malloc(strlen(grep_arg0) + 1);
         strcpy(grep_for_corona_command->args[0], grep_arg0);
-        char *grep_arg1 = "<td style=\"font-weight: bold; text-align:right\"></td> </tr> <tr style=\"\"> <td style=\"font-weight: bold; font-size:15px; text-align:left;\"> Turkey </td> <td style=\"font-weight: bold; text-align:right\">[0-9]*</td>";
+        char *grep_arg1 = "(?<=<td style=\"font-weight: bold; text-align:right\"></td> </tr> <tr style=\"\"> <td style=\"font-weight: bold; font-size:15px; text-align:left;\"> Turkey </td> <td style=\"font-weight: bold; text-align:right\">)[0-9]*(?=</td>)";
         grep_for_corona_command->args[1] = malloc(strlen(grep_arg1) + 1);
         strcpy(grep_for_corona_command->args[1], grep_arg1);
         grep_for_corona_command->args[2] = malloc(strlen(temp_filename) + 1);
@@ -731,8 +733,6 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         command->args[3] = malloc(strlen(wget_arg3)+1);
         strcpy(command->args[3], wget_arg3);
         command->next = grep_for_corona_command;
-
-        // TODO: parsing the last part from the table cell
     }
 
     int child_to_parent_pipe[2];
