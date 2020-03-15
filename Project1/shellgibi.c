@@ -184,7 +184,6 @@ int should_complete_filename(char *buf, char *filename_start) {
     char *last_token = pch;
 
     while ((pch = strtok(NULL, splitters)) != NULL) {
-        printf("Last token %s", last_token);
         last_token = pch;
     }
 
