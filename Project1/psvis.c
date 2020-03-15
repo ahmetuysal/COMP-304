@@ -38,7 +38,7 @@ void DFS(struct task_struct *task, int **tree_pid, int **tree_time, int depth)
 /* This function is called when the module is loaded. */
 int proc_init(void)
 {
-    printk(KERN_INFO "----- PSVIS -----\n");
+    printk(KERN_INFO "Loading PSVIS Module\n");
     // checking the given PID
     if (PID < 0)
     {
@@ -51,10 +51,10 @@ int proc_init(void)
         tree_pid = kmalloc(100 * sizeof(int*), GFP_KERNEL);
         tree_time = kmalloc(100 * sizeof(int*), GFP_KERNEL);
         int i;
-        for (i = 0; i < 100; i++) {
-            tree_pid[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
-            tree_time[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
-        }
+        //for (i = 0; i < 100; i++) {
+        //    tree_pid[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
+        //    tree_time[i] = kmalloc(100 * sizeof(int), GFP_KERNEL);
+        //}
         // finding the task with given PID
         task = pid_task(find_vpid((pid_t)PID), PIDTYPE_PID);
         tree_pid[0][0] = (int) task->pid;
@@ -75,12 +75,12 @@ void proc_exit(void)
     }
     kfree(tree_pid);
     kfree(tree_time);
-    //printk(KERN_INFO "Removing Module\n");
+    printk(KERN_INFO "Removing PSVIS Module\n");
 }
 /* Macros for registering module entry and exit points. */
 module_init(proc_init);
 module_exit(proc_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("psvis module");
-MODULE_AUTHOR("Furkan Sahbaz and Ahmet Uysal");
+MODULE_DESCRIPTION("pPSVIS Module");
+MODULE_AUTHOR("Ahmet Uysal & Furkan Sahbaz");

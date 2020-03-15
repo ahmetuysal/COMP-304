@@ -1,0 +1,3 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+00 12 * * * echo "Hand wash reminder!" | mail -s  "It's time to wash your hands again (use hwtim 20)!" fursahbaz@gmail.com 

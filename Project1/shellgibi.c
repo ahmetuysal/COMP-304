@@ -634,6 +634,62 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         }
     }
 
+
+    if (strcmp(command->name, "psvis") == 0) {
+        long root_process = strtol(command->args[0], NULL, 10);
+        
+        
+        pid_t pid_s1 = fork();
+        
+        if (pid_s1 == 0) //child process
+        {
+            char temp1[50], temp2[50];
+            strcpy(temp1, "PID=");
+            sprintf(temp2, "%d", (int) root_process);
+            strcat(temp1, temp2);
+
+            command->name = "sudo";
+            command->args = (char **) realloc(
+                    command->args, sizeof(char) * (command->arg_count = 3));
+
+            command->args[0] = "insmod";
+            command->args[1] = "psvis.ko";
+            command->args[2] = temp1;
+            return execvp_command(command);
+        } else {
+            waitpid(pid_s1, NULL, 0); // wait for child process to finish
+            pid_t pid_s2 = fork();
+            if (pid_s2 == 0) { // child process
+                command->arg_count = 2;
+                command->args = (char **) malloc(command->arg_count*sizeof(char *));
+                command->name = "sudo";
+                command->args[0] = "rmmod";
+                command->args[1] = "psvis";
+                return execvp_command(command);
+            } else {
+                waitpid(pid_s2, NULL, 0); // wait for child process to finish
+                char *fname = malloc(strlen(command->args[1])+1);
+                strcpy(fname,command->args[1]);
+                command->args = (char **) realloc(
+                    command->args, sizeof(char) * (command->arg_count = 2));
+                //command->arg_count = 2;
+                char *sudo_name = "sudo";
+                command->name = realloc(command->name, strlen(sudo_name)+1);
+                strcpy(command->name,sudo_name);
+                //command->name = "sudo";
+                char *sudo_arg0 = "dmesg";
+                char *sudo_arg1 = "-c";
+                command->args[0] = realloc(command->args[0], strlen(sudo_arg0)+1);
+                strcpy(command->args[0],sudo_arg0);
+                command->args[1] = realloc(command->args[1], strlen(sudo_arg1)+1);
+                strcpy(command->args[1],sudo_arg1);
+                command->redirects[1] = malloc(strlen(fname)+1);
+                strcpy(command->redirects[1], fname);
+            }
+        }
+
+    }
+
     // Ahmet Uysal Custom Command, prints the number of coronavirus cases in Turkey
     if (strcmp(command->name, "corona") == 0) {
         struct command_t *grep_for_corona_command = malloc(sizeof(struct command_t));
@@ -912,59 +968,6 @@ int execute_command(struct command_t *command) {
         exit(SUCCESS);
     }
 
-    if (strcmp(command->name, "psvis") == 0) {
-
-        long root_process = strtol(command->args[0], NULL, 10);
-        char temp1[50], temp2[50];
-        pid_t pid_s1 = fork();
-
-        if (pid_s1 == 0) //child process
-        {
-
-            strcpy(temp1, "PID=");
-            sprintf(temp2, "%d", (int) root_process);
-            strcat(temp1, temp2);
-
-            command->name = "sudo";
-            command->args = (char **) realloc(
-                    command->args, sizeof(char) * (command->arg_count = 3));
-
-            command->args[0] = "insmod";
-            command->args[1] = "psvis.ko";
-            command->args[2] = temp1;
-
-            return execvp_command(command);
-        } else {
-            waitpid(pid_s1, NULL, 0); // wait for child process to finish
-            pid_t pid_s2 = fork();
-            if (pid_s2 == 0) { // child process
-                command->args = (char **) malloc(sizeof(char *));
-                command->arg_count = 2;
-                command->name = "sudo";
-                command->args[0] = "rmmod";
-                command->args[1] = "psvis";
-                return execvp_command(command);
-            } else {
-                waitpid(pid_s2, NULL, 0); // wait for child process to finish
-                pid_t pid_d = fork();
-                if (pid_d == 0) { // child process
-                    command->args = (char **) malloc(sizeof(char *));
-                    command->arg_count = 2;
-                    command->name = "sudo";
-                    command->args[0] = "dmesg";
-                    command->args[1] = "-c";
-                    //command->arg_count = 0;
-                    //print_command(command);
-                    return execvp_command(command);
-                } else {
-                    waitpid(pid_d,NULL,0);
-                    exit(SUCCESS);
-                }
-            }
-        }
-
-    }
-
     if (strcmp(command->name, "alarm") == 0) {
         if (command->arg_count != 2) {
             print_error("alarm requires two arguments <HH.MM> <music_file>");
@@ -997,7 +1000,7 @@ int execute_command(struct command_t *command) {
         return execvp_command(command);
     }
 
-
+    // Furkan Sahbaz--custom command.
     if (strcmp(command->name, "hwtim") == 0) { //handwashing timer
         char *temp1, *temp2;
 
@@ -1014,7 +1017,7 @@ int execute_command(struct command_t *command) {
                 sleep(1);
                 printf("%d\n",i+1);
             }
-            printf("You are dones washing.\n");
+            printf("You are done washing.\n");
         }
 
         if (command->arg_count == 2)
