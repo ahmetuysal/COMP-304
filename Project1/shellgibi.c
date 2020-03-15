@@ -705,7 +705,7 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
         char *grep_arg0 = "-Po";
         grep_for_corona_command->args[0] = malloc(strlen(grep_arg0) + 1);
         strcpy(grep_for_corona_command->args[0], grep_arg0);
-        char *grep_arg1 = "(?<=<td style=\"font-weight: bold; text-align:right\"></td> </tr> <tr style=\"\"> <td style=\"font-weight: bold; font-size:15px; text-align:left;\"> Turkey </td> <td style=\"font-weight: bold; text-align:right\">)[0-9]*(?=</td>)";
+        char *grep_arg1 = "<td[^>]*> Turkey </td>(\\s*)<td[^>]*>\\K[0-9]*(?=</td>)";
         grep_for_corona_command->args[1] = malloc(strlen(grep_arg1) + 1);
         strcpy(grep_for_corona_command->args[1], grep_arg1);
         grep_for_corona_command->args[2] = malloc(strlen(temp_filename) + 1);
@@ -836,7 +836,6 @@ int process_command_child(struct command_t *command, const int *child_to_parent_
     } else if (stdout_redirected_to_multiple_files) {
         char temp_filename[16 + 1];
         tmpnam(temp_filename);
-        printf("File name: %s\n", temp_filename);
         pid_t pid2 = fork();
         if (pid2 == 0) {
             // grandchild
