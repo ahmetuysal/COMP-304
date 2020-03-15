@@ -1067,7 +1067,7 @@ int execv_command(struct command_t *command) {
 
     // If we reach here, we couldn't find the command on path
     printf("-%s: %s: command not found\n", sysname, command->name);
-    return UNKNOWN;
+    exit(UNKNOWN);
 }
 
 
