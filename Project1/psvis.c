@@ -42,7 +42,7 @@ int proc_init(void)
     // checking the given PID
     if (PID < 0)
     {
-        printk("Wrong PID, going to unload.\n");
+        printk(KERN_INFO "Wrong PID, going to unload.\n");
         return 1;
     }
     else // valid PID
@@ -57,9 +57,14 @@ int proc_init(void)
         }
         // finding the task with given PID
         task = pid_task(find_vpid((pid_t)PID), PIDTYPE_PID);
-        tree_pid[0][0] = (int) task->pid;
-        tree_time[0][0] = (int) task->start_time;
-        DFS(task,tree_pid,tree_time,0);
+        if (task != NULL) {
+            tree_pid[0][0] = (int) task->pid;
+            tree_time[0][0] = (int) task->start_time;
+            DFS(task,tree_pid,tree_time,0);
+        } else {
+            printk(KERN_ALERT "Process with PID %d is not found.",PID);
+        }
+        
     }
 
     return 0;
