@@ -639,6 +639,10 @@ int process_command(struct command_t *command, int parent_to_child_pipe[2]) {
     if (strcmp(command->name, "psvis") == 0) {
         long root_process = strtol(command->args[0], NULL, 10);
         
+        if (command->arg_count != 2) {
+            print_error("psvis requires two arguments.");
+            return INVALID;
+        }
         
         pid_t pid_s1 = fork();
         
@@ -1003,7 +1007,7 @@ int execute_command(struct command_t *command) {
     if (strcmp(command->name, "hwtim") == 0) { //handwashing timer
         char *temp1, *temp2;
 
-        if (command->arg_count != 2) {
+        if (command->arg_count < 1 || command->arg_count > 2) {
             print_error("hwtim requires handwash time and/or email.");
             exit(INVALID);
         }
