@@ -3,6 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <cstring>
+#include <string>
 #include <sys/time.h>
 #include <queue>
 #include <pthread.h>
@@ -26,6 +27,15 @@ class ConcurrentPlaneQueue {
 private:
     std::queue<Plane> queue;
     pthread_mutex_t lock{};
+
+    std::string queue_to_string(std::queue<Plane> q) {
+        std::string str_rep;
+        while (!q.empty()) {
+            str_rep += std::to_string(q.front().id) + " ";
+            q.pop();
+        }
+        return str_rep;
+    }
 
 public:
     void push(const Plane &plane) {
@@ -69,6 +79,13 @@ public:
         return return_val;
     }
 
+    std::string to_string() {
+        pthread_mutex_lock(&lock);
+        std::string str_rep = queue_to_string(queue);
+        pthread_mutex_unlock(&lock);
+        return str_rep;
+    }
+
     ConcurrentPlaneQueue() {
         lock = PTHREAD_MUTEX_INITIALIZER;
     }
@@ -83,7 +100,7 @@ enum PlaneType {
 int pthread_sleep(int seconds);
 
 void parse_command_line_arguments(int argc, char *argv[], int *total_simulation_time, double *landing_plane_prob,
-                                  unsigned int *random_seed);
+                                  unsigned int *random_seed, int *queue_log_start_time);
 
 void create_plane(PlaneType planeType, time_t currentTime);
 
@@ -109,6 +126,7 @@ pthread_mutex_t iteration_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t iteration_cond = PTHREAD_COND_INITIALIZER;
 unsigned int current_plane_id = -1;
 FILE *plane_log_file;
+FILE *queue_log_file;
 
 /**
  * This program simulates an air traffic controller.
@@ -121,13 +139,16 @@ int main(int argc, char *argv[]) {
     int total_simulation_time;
     double landing_plane_prob;
     unsigned int random_seed;
-    parse_command_line_arguments(argc, argv, &total_simulation_time, &landing_plane_prob, &random_seed);
+    int queue_log_start_time;
+    parse_command_line_arguments(argc, argv, &total_simulation_time, &landing_plane_prob, &random_seed,
+                                 &queue_log_start_time);
     struct timeval tp{};
     gettimeofday(&tp, nullptr);
     simulation_start_time = tp.tv_sec;
     simulation_end_time = tp.tv_sec + total_simulation_time;
     time_t next_emergency_time = tp.tv_sec + 40;
     plane_log_file = fopen("./planes.log", "w+");
+    queue_log_file = fopen("./queues.log", "w+");
     fprintf(plane_log_file, "PlaneID\tStatus\tRequest Time\tRunway Time\tTurnaround Time\n");
     srand(random_seed);
 
@@ -137,9 +158,22 @@ int main(int argc, char *argv[]) {
     create_plane(DEPARTING, tp.tv_sec);
     pthread_t air_controller_thread;
     pthread_create(&air_controller_thread, nullptr, air_traffic_control_main, nullptr);
-    pthread_sleep(1);
-    gettimeofday(&tp, nullptr);
+
     while (tp.tv_sec < simulation_end_time) {
+        if (tp.tv_sec >= queue_log_start_time + simulation_start_time) {
+            fprintf(queue_log_file, "At %ld sec departing queue: %s\n",
+                    tp.tv_sec - simulation_start_time,
+                    departing_queue.to_string().c_str());
+            fprintf(queue_log_file, "At %ld sec landing queue: %s\n",
+                    tp.tv_sec - simulation_start_time,
+                    landing_queue.to_string().c_str());
+            fprintf(queue_log_file, "At %ld sec emergency queue: %s\n",
+                    tp.tv_sec - simulation_start_time,
+                    emergency_queue.to_string().c_str());
+        }
+        pthread_sleep(1);
+        gettimeofday(&tp, nullptr);
+
         double random_ = random_double();
         if (random_ <= landing_plane_prob) {
             create_plane(LANDING, tp.tv_sec);
@@ -151,11 +185,11 @@ int main(int argc, char *argv[]) {
             create_plane(EMERGENCY, tp.tv_sec);
             next_emergency_time += 40;
         }
-        pthread_sleep(1);
-        gettimeofday(&tp, nullptr);
+
     }
 
     fclose(plane_log_file);
+    fclose(queue_log_file);
     return 0;
 }
 
@@ -202,17 +236,21 @@ int pthread_sleep(int seconds) {
  * 0.5 is used by default if this argument is omitted or illegal
  * -r (random seed): an integer value to set a seed to random generator. current calendar time is used by default if
  * this argument is omitted or illegal
+ * -n (queue log start time): an integer value that controls the second at which program starts to log content of queues
+ * to a text file
  * @param argc argument count
  * @param argv arguments array
  * @param total_simulation_time pointer to total_simulation_time variable
  * @param landing_plane_prob pointer to landing_plane_prob variable
  * @param random_seed pointer to random_seed variable
+ * @param queue_log_start_time pointer to queue_log_start_time
  */
 void parse_command_line_arguments(int argc, char **argv, int *total_simulation_time, double *landing_plane_prob,
-                                  unsigned int *random_seed) {
+                                  unsigned int *random_seed, int *queue_log_start_time) {
     int simulation_time = 100;
     double probability = 0.5;
     unsigned int seed = time(nullptr);
+    int queue_log_start = 0;
 
     for (int i = 1; i < argc - 1; i++) {
         if (strcmp("-s", argv[i]) == 0) {
@@ -245,12 +283,25 @@ void parse_command_line_arguments(int argc, char **argv, int *total_simulation_t
                 std::cout << "You entered an illegal value for seed, " << seed
                           << " will be used as default" << std::endl;
             }
+        } else if (strcmp("-n", argv[i]) == 0) {
+            int queue_log_start_arg = atoi(argv[i + 1]);
+            // user entered 0 as queue_log_start
+            if (strcmp(argv[i + 1], "0") == 0) {
+                queue_log_start = 0;
+            } else if (queue_log_start_arg != 0) {
+                queue_log_start = queue_log_start_arg;
+            } else {
+                std::cout
+                        << "You entered an illegal value for queue log starting time, logging will start at time 0 by default"
+                        << std::endl;
+            }
         }
     }
 
     *total_simulation_time = simulation_time;
     *landing_plane_prob = probability;
     *random_seed = seed;
+    *queue_log_start_time = queue_log_start;
 }
 
 
@@ -299,7 +350,6 @@ void *air_traffic_control_main(void *) {
     gettimeofday(&tp, nullptr);
     while (tp.tv_sec < simulation_end_time) {
         if (!emergency_queue.empty()) {
-            printf("Emergency\n");
             Plane plane = emergency_queue.front_and_pop();
             current_plane_id = plane.id;
             pthread_cond_broadcast(&iteration_cond);
@@ -310,7 +360,6 @@ void *air_traffic_control_main(void *) {
                     tp.tv_sec - simulation_start_time,
                     tp.tv_sec - plane.arrival_time + 2);
         } else if (landing_queue.empty() || departing_queue.size() >= 5) {
-            printf("Departing\n");
             Plane plane = departing_queue.front_and_pop();
             current_plane_id = plane.id;
             fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
@@ -320,7 +369,6 @@ void *air_traffic_control_main(void *) {
                     tp.tv_sec - simulation_start_time,
                     tp.tv_sec - plane.arrival_time + 2);
         } else {
-            printf("Landing\n");
             Plane plane = landing_queue.front_and_pop();
             current_plane_id = plane.id;
             fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
