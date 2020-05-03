@@ -1,0 +1,180 @@
+At 0 sec departing queue: 1
+At 0 sec landing queue: 0
+At 0 sec emergency queue:
+At 1 sec departing queue: 1
+At 1 sec landing queue:
+At 1 sec emergency queue:
+At 2 sec departing queue: 3
+At 2 sec landing queue: 2
+At 2 sec emergency queue:
+At 3 sec departing queue: 3 5
+At 3 sec landing queue: 2 4
+At 3 sec emergency queue:
+At 4 sec departing queue: 3 5 7
+At 4 sec landing queue: 4 6
+At 4 sec emergency queue:
+At 5 sec departing queue: 3 5 7
+At 5 sec landing queue: 4 6
+At 5 sec emergency queue:
+At 6 sec departing queue: 3 5 7
+At 6 sec landing queue: 6
+At 6 sec emergency queue:
+At 7 sec departing queue: 3 5 7
+At 7 sec landing queue: 6
+At 7 sec emergency queue:
+At 8 sec departing queue: 3 5 7 9
+At 8 sec landing queue: 8
+At 8 sec emergency queue:
+At 9 sec departing queue: 3 5 7 9
+At 9 sec landing queue: 8
+At 9 sec emergency queue:
+At 10 sec departing queue: 3 5 7 9
+At 10 sec landing queue:
+At 10 sec emergency queue:
+At 11 sec departing queue: 3 5 7 9 11
+At 11 sec landing queue: 10
+At 11 sec emergency queue:
+At 12 sec departing queue: 5 7 9 11 13
+At 12 sec landing queue: 10 12
+At 12 sec emergency queue:
+At 13 sec departing queue: 5 7 9 11 13 15
+At 13 sec landing queue: 10 12 14
+At 13 sec emergency queue:
+At 14 sec departing queue: 7 9 11 13 15 17
+At 14 sec landing queue: 10 12 14 16
+At 14 sec emergency queue:
+At 15 sec departing queue: 7 9 11 13 15 17 19
+At 15 sec landing queue: 10 12 14 16 18
+At 15 sec emergency queue:
+At 16 sec departing queue: 9 11 13 15 17 19
+At 16 sec landing queue: 10 12 14 16 18
+At 16 sec emergency queue:
+At 17 sec departing queue: 9 11 13 15 17 19
+At 17 sec landing queue: 10 12 14 16 18
+At 17 sec emergency queue:
+At 18 sec departing queue: 11 13 15 17 19
+At 18 sec landing queue: 10 12 14 16 18
+At 18 sec emergency queue:
+At 19 sec departing queue: 11 13 15 17 19
+At 19 sec landing queue: 10 12 14 16 18
+At 19 sec emergency queue:
+At 20 sec departing queue: 11 13 15 17 19
+At 20 sec landing queue: 12 14 16 18
+At 20 sec emergency queue:
+At 21 sec departing queue: 11 13 15 17 19
+At 21 sec landing queue: 12 14 16 18
+At 21 sec emergency queue:
+At 22 sec departing queue: 13 15 17 19
+At 22 sec landing queue: 12 14 16 18
+At 22 sec emergency queue:
+At 23 sec departing queue: 13 15 17 19
+At 23 sec landing queue: 12 14 16 18
+At 23 sec emergency queue:
+At 24 sec departing queue: 13 15 17 19 21
+At 24 sec landing queue: 14 16 18 20
+At 24 sec emergency queue:
+At 25 sec departing queue: 13 15 17 19 21
+At 25 sec landing queue: 14 16 18 20
+At 25 sec emergency queue:
+At 26 sec departing queue: 15 17 19 21 23
+At 26 sec landing queue: 14 16 18 20 22
+At 26 sec emergency queue:
+At 27 sec departing queue: 15 17 19 21 23 25
+At 27 sec landing queue: 14 16 18 20 22 24
+At 27 sec emergency queue:
+At 28 sec departing queue: 15 17 19 21 23 25
+At 28 sec landing queue: 16 18 20 22 24
+At 28 sec emergency queue:
+At 29 sec departing queue: 15 17 19 21 23 25 27
+At 29 sec landing queue: 16 18 20 22 24 26
+At 29 sec emergency queue:
+At 30 sec departing queue: 17 19 21 23 25 27
+At 30 sec landing queue: 16 18 20 22 24 26
+At 30 sec emergency queue:
+At 31 sec departing queue: 17 19 21 23 25 27 29
+At 31 sec landing queue: 16 18 20 22 24 26 28
+At 31 sec emergency queue:
+At 32 sec departing queue: 17 19 21 23 25 27 29
+At 32 sec landing queue: 18 20 22 24 26 28
+At 32 sec emergency queue:
+At 33 sec departing queue: 17 19 21 23 25 27 29
+At 33 sec landing queue: 18 20 22 24 26 28
+At 33 sec emergency queue:
+At 34 sec departing queue: 19 21 23 25 27 29
+At 34 sec landing queue: 18 20 22 24 26 28
+At 34 sec emergency queue:
+At 35 sec departing queue: 19 21 23 25 27 29
+At 35 sec landing queue: 18 20 22 24 26 28
+At 35 sec emergency queue:
+At 36 sec departing queue: 19 21 23 25 27 29
+At 36 sec landing queue: 20 22 24 26 28
+At 36 sec emergency queue:
+At 37 sec departing queue: 19 21 23 25 27 29 31
+At 37 sec landing queue: 20 22 24 26 28 30
+At 37 sec emergency queue:
+At 38 sec departing queue: 21 23 25 27 29 31
+At 38 sec landing queue: 20 22 24 26 28 30
+At 38 sec emergency queue:
+At 39 sec departing queue: 21 23 25 27 29 31
+At 39 sec landing queue: 20 22 24 26 28 30
+At 39 sec emergency queue:
+At 40 sec departing queue: 21 23 25 27 29 31
+At 40 sec landing queue: 22 24 26 28 30
+At 40 sec emergency queue: 32
+At 41 sec departing queue: 21 23 25 27 29 31
+At 41 sec landing queue: 22 24 26 28 30
+At 41 sec emergency queue: 32
+At 42 sec departing queue: 21 23 25 27 29 31
+At 42 sec landing queue: 22 24 26 28 30
+At 42 sec emergency queue:
+At 43 sec departing queue: 21 23 25 27 29 31 33
+At 43 sec landing queue: 22 24 26 28 30 34
+At 43 sec emergency queue:
+At 44 sec departing queue: 23 25 27 29 31 33
+At 44 sec landing queue: 22 24 26 28 30 34
+At 44 sec emergency queue:
+At 45 sec departing queue: 23 25 27 29 31 33
+At 45 sec landing queue: 22 24 26 28 30 34
+At 45 sec emergency queue:
+At 46 sec departing queue: 23 25 27 29 31 33 35
+At 46 sec landing queue: 24 26 28 30 34 36
+At 46 sec emergency queue:
+At 47 sec departing queue: 23 25 27 29 31 33 35 37
+At 47 sec landing queue: 24 26 28 30 34 36 38
+At 47 sec emergency queue:
+At 48 sec departing queue: 25 27 29 31 33 35 37
+At 48 sec landing queue: 24 26 28 30 34 36 38
+At 48 sec emergency queue:
+At 49 sec departing queue: 25 27 29 31 33 35 37 39
+At 49 sec landing queue: 24 26 28 30 34 36 38 40
+At 49 sec emergency queue:
+At 50 sec departing queue: 25 27 29 31 33 35 37 39 41
+At 50 sec landing queue: 26 28 30 34 36 38 40 42
+At 50 sec emergency queue:
+At 51 sec departing queue: 25 27 29 31 33 35 37 39 41 43
+At 51 sec landing queue: 26 28 30 34 36 38 40 42 44
+At 51 sec emergency queue:
+At 52 sec departing queue: 27 29 31 33 35 37 39 41 43
+At 52 sec landing queue: 26 28 30 34 36 38 40 42 44
+At 52 sec emergency queue:
+At 53 sec departing queue: 27 29 31 33 35 37 39 41 43
+At 53 sec landing queue: 26 28 30 34 36 38 40 42 44
+At 53 sec emergency queue:
+At 54 sec departing queue: 27 29 31 33 35 37 39 41 43
+At 54 sec landing queue: 28 30 34 36 38 40 42 44
+At 54 sec emergency queue:
+At 55 sec departing queue: 27 29 31 33 35 37 39 41 43
+At 55 sec landing queue: 28 30 34 36 38 40 42 44
+At 55 sec emergency queue:
+At 56 sec departing queue: 29 31 33 35 37 39 41 43 45
+At 56 sec landing queue: 28 30 34 36 38 40 42 44 46
+At 56 sec emergency queue:
+At 57 sec departing queue: 29 31 33 35 37 39 41 43 45 47
+At 57 sec landing queue: 28 30 34 36 38 40 42 44 46 48
+At 57 sec emergency queue:
+At 58 sec departing queue: 29 31 33 35 37 39 41 43 45 47 49
+At 58 sec landing queue: 30 34 36 38 40 42 44 46 48 50
+At 58 sec emergency queue:
+At 59 sec departing queue: 29 31 33 35 37 39 41 43 45 47 49 51
+At 59 sec landing queue: 30 34 36 38 40 42 44 46 48 50 52
+At 59 sec emergency queue: 
