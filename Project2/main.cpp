@@ -62,6 +62,13 @@ public:
         return return_val;
     }
 
+    int size() {
+        pthread_mutex_lock(&lock);
+        int return_val = queue.size();
+        pthread_mutex_unlock(&lock);
+        return return_val;
+    }
+
     ConcurrentPlaneQueue() {
         lock = PTHREAD_MUTEX_INITIALIZER;
     }
@@ -302,23 +309,23 @@ void *air_traffic_control_main(void *) {
                     plane.arrival_time - simulation_start_time,
                     tp.tv_sec - simulation_start_time,
                     tp.tv_sec - plane.arrival_time + 2);
-        } else if (!landing_queue.empty()) {
-            printf("Landing\n");
-            Plane plane = landing_queue.front_and_pop();
-            current_plane_id = plane.id;
-            fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
-                    plane.id,
-                    'L',
-                    plane.arrival_time - simulation_start_time,
-                    tp.tv_sec - simulation_start_time,
-                    tp.tv_sec - plane.arrival_time + 2);
-        } else {
+        } else if (landing_queue.empty() || departing_queue.size() >= 5) {
             printf("Departing\n");
             Plane plane = departing_queue.front_and_pop();
             current_plane_id = plane.id;
             fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
                     plane.id,
                     'D',
+                    plane.arrival_time - simulation_start_time,
+                    tp.tv_sec - simulation_start_time,
+                    tp.tv_sec - plane.arrival_time + 2);
+        } else {
+            printf("Landing\n");
+            Plane plane = landing_queue.front_and_pop();
+            current_plane_id = plane.id;
+            fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
+                    plane.id,
+                    'L',
                     plane.arrival_time - simulation_start_time,
                     tp.tv_sec - simulation_start_time,
                     tp.tv_sec - plane.arrival_time + 2);
