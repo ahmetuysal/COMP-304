@@ -359,7 +359,9 @@ void *air_traffic_control_main(void *) {
                     plane.arrival_time - simulation_start_time,
                     tp.tv_sec - simulation_start_time,
                     tp.tv_sec - plane.arrival_time + 2);
-        } else if (landing_queue.empty() || departing_queue.size() >= 5) {
+        } else if (landing_queue.empty() ||
+                   (departing_queue.size() >= 5 &&
+                    departing_queue.front().arrival_time < landing_queue.front().arrival_time)) {
             Plane plane = departing_queue.front_and_pop();
             current_plane_id = plane.id;
             fprintf(plane_log_file, "%d\t%c\t%ld\t%ld\t%ld\n",
