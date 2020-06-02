@@ -11,22 +11,25 @@ public class ContiguousAllocationFileSystem implements FileSystem {
     private final Map<Integer, FileEntry> directoryTable;
     private final int[] directory;
     private final Random randomGenerator;
+    private final int blockSize;
     private int emptyBlockCount;
 
-    public ContiguousAllocationFileSystem(int directorySize) {
+    public ContiguousAllocationFileSystem(int directorySize, int blockSize) {
         this.directoryTable = new HashMap<>();
         this.directory = new int[directorySize];
         this.emptyBlockCount = directorySize;
+        this.blockSize = blockSize;
         this.randomGenerator = new Random();
     }
 
     @Override
     public boolean createFile(int fileId, int fileLength) {
-        if (emptyBlockCount < fileLength)
+        int correspondingBlockSize = (int) Math.ceil((double) fileLength / blockSize);
+        if (emptyBlockCount < correspondingBlockSize)
             return false;
         // after this point, we are sure that there is enough empty blocks to store the file
 
-        int firstFitIndex = getFirstFitForSize(fileLength);
+        int firstFitIndex = getFirstFitForSize(correspondingBlockSize);
         // if there is no holes big enough to fit the file, we need to apply compaction
         if (firstFitIndex == -1) {
             applyCompaction();
@@ -36,23 +39,24 @@ public class ContiguousAllocationFileSystem implements FileSystem {
         }
 
         // allocate
-        for (int i = firstFitIndex; i < firstFitIndex + fileLength; i++) {
+        for (int i = firstFitIndex; i < firstFitIndex + correspondingBlockSize; i++) {
             directory[i] = 1 + randomGenerator.nextInt(Integer.MAX_VALUE);
         }
-        emptyBlockCount -= fileLength;
+        emptyBlockCount -= correspondingBlockSize;
 
         // add file to directory table
-        directoryTable.put(fileId, new FileEntry(fileId, firstFitIndex, fileLength));
+        directoryTable.put(fileId, new FileEntry(fileId, firstFitIndex, correspondingBlockSize));
 
         return true;
     }
 
     @Override
     public int access(int fileId, int byteOffset) {
+        int correspondingBlockSize = (int) Math.floor((double) byteOffset / blockSize);
         FileEntry fileInfo = directoryTable.get(fileId);
         // check for file size boundary
-        if (byteOffset < fileInfo.getFileSize()) {
-            return directory[fileInfo.getStartingBlockIndex() + byteOffset];
+        if (correspondingBlockSize < fileInfo.getFileSize()) {
+            return fileInfo.getStartingBlockIndex() + correspondingBlockSize;
         } else {
             return -1;
         }
@@ -138,7 +142,6 @@ public class ContiguousAllocationFileSystem implements FileSystem {
                     return false;
                 }
             }
-
         }
 
         emptyBlockCount -= extensionBlocks;

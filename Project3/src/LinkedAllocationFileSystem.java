@@ -10,19 +10,22 @@ public class LinkedAllocationFileSystem implements FileSystem {
     private final Map<Integer, FileEntry> directoryTable;
     private final int[] directory;
     private final Random randomGenerator;
+    private final int blockSize;
     private int emptyBlockCount;
 
-    public LinkedAllocationFileSystem(int directorySize) {
+    public LinkedAllocationFileSystem(int directorySize, int blockSize) {
         this.directoryTable = new HashMap<>();
         this.directory = new int[directorySize];
         this.emptyBlockCount = directorySize;
+        this.blockSize = blockSize;
         this.randomGenerator = new Random();
     }
 
     @Override
     public boolean createFile(int fileId, int fileLength) {
         // +2 because we will create at least 1 chunk and every chunk requires 2 additional indices
-        if (emptyBlockCount < fileLength + 2)
+        int correspondingBlockSize = (int) Math.ceil((double) fileLength / blockSize);
+        if (emptyBlockCount < correspondingBlockSize + 2)
             return false;
 
         // each chunk consists of
@@ -38,14 +41,14 @@ public class LinkedAllocationFileSystem implements FileSystem {
         // this is required since we will need to link each chunk to consequent chunk
         int lastIndexOfTheLatestChunk = -1;
         int i = 0;
-        while (i < directory.length && blocksStored < fileLength) {
+        while (i < directory.length && blocksStored < correspondingBlockSize) {
             if (directory[i] == 0) {
                 // starting a new chunk
                 if (chunkStartIndex == -1) {
                     if (numberOfChunks == 0) {
                         // this is the first chunk, create the file entry
                         // this entry will also be used to rollback if file creation fails
-                        fileInfo = new FileEntry(fileId, i, fileLength);
+                        fileInfo = new FileEntry(fileId, i, correspondingBlockSize);
                     } else {
                         // link latest chunk to this new chunk
                         directory[lastIndexOfTheLatestChunk] = i;
@@ -74,13 +77,13 @@ public class LinkedAllocationFileSystem implements FileSystem {
             }
         }
 
-        if (blocksStored == fileLength && i < directory.length) {
+        if (blocksStored == correspondingBlockSize && i < directory.length) {
             // file is successfully stored
             // put chunk size to last chunk
             directory[chunkStartIndex] = chunkSize;
             // put -1 to the last index of last chunk (which is i)
             directory[i] = -1;
-            emptyBlockCount -= (fileLength + 2 * (numberOfChunks));
+            emptyBlockCount -= (correspondingBlockSize + 2 * (numberOfChunks));
             directoryTable.put(fileId, fileInfo);
             return true;
         } else {
@@ -111,7 +114,27 @@ public class LinkedAllocationFileSystem implements FileSystem {
 
     @Override
     public int access(int fileId, int byteOffset) {
-        return 0;
+        FileEntry fileInfo = directoryTable.get(fileId);
+
+        int correspondingBlockSize = (int) Math.floor((double) byteOffset / blockSize);
+
+        // check for file size boundary
+        if (correspondingBlockSize >= fileInfo.getFileSize()) {
+            return -1;
+        }
+
+        int currentOffset = 0;
+        int currentIndex = fileInfo.getStartingBlockIndex();
+
+        // jump to next chunk until we are in the correct chunk
+        while (currentOffset + directory[currentIndex] < correspondingBlockSize) {
+            currentOffset += directory[currentIndex];
+            currentIndex = directory[currentIndex + directory[currentIndex] + 1];
+        }
+
+        // current index stores the first index of the chunk we are looking for
+        // current offset stores number of data blocks we have jumped so far
+        return currentIndex + 1 + (correspondingBlockSize - currentOffset);
     }
 
     @Override

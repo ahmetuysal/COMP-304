@@ -4,6 +4,7 @@
 public class FileEntry {
     private final int fileId;
     private int startingBlockIndex;
+    // file size in Blocks
     private int fileSize;
 
     public FileEntry(int fileId, int startingBlockIndex, int fileSize) {
