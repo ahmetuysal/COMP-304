@@ -16,5 +16,5 @@ public interface FileSystem {
 
     boolean extend(int fileId, int extensionBlocks);
 
-    void shrink(int fileId, int shrinkingBlocks);
+    boolean shrink(int fileId, int shrinkingBlocks);
 }

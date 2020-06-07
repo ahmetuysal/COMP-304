@@ -55,7 +55,7 @@ public class ContiguousAllocationFileSystem implements FileSystem {
         int correspondingBlockSize = (int) Math.floor((double) byteOffset / blockSize);
         FileEntry fileInfo = directoryTable.get(fileId);
         // check for file size boundary
-        if (correspondingBlockSize < fileInfo.getFileSize()) {
+        if (fileInfo != null && correspondingBlockSize < fileInfo.getFileSize()) {
             return fileInfo.getStartingBlockIndex() + correspondingBlockSize;
         } else {
             return -1;
@@ -68,6 +68,11 @@ public class ContiguousAllocationFileSystem implements FileSystem {
             return false;
 
         FileEntry fileInfo = directoryTable.get(fileId);
+
+        if (fileInfo == null) {
+            return false;
+        }
+
         // directly extend the file if area right after file is already available
         if (isAreaAvailable(fileInfo.getStartingBlockIndex() + fileInfo.getFileSize(), extensionBlocks)) {
             for (int i = fileInfo.getStartingBlockIndex() + fileInfo.getFileSize();
@@ -149,14 +154,20 @@ public class ContiguousAllocationFileSystem implements FileSystem {
     }
 
     @Override
-    public void shrink(int fileId, int shrinkingBlocks) {
+    public boolean shrink(int fileId, int shrinkingBlocks) {
         FileEntry fileInfo = directoryTable.get(fileId);
+
+        if (fileInfo == null || fileInfo.getFileSize() <= shrinkingBlocks) {
+            return false;
+        }
+
 
         for (int i = fileInfo.getStartingBlockIndex() + fileInfo.getFileSize() - shrinkingBlocks;
              i < fileInfo.getStartingBlockIndex() + fileInfo.getFileSize(); i++) {
             directory[i] = 0;
         }
         emptyBlockCount += shrinkingBlocks;
+        return true;
     }
 
     /**
