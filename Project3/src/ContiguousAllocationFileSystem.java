@@ -148,7 +148,7 @@ public class ContiguousAllocationFileSystem implements FileSystem {
                 }
             }
         }
-
+        fileInfo.setFileSize(fileInfo.getFileSize() - extensionBlocks);
         emptyBlockCount -= extensionBlocks;
         return true;
     }
@@ -166,6 +166,7 @@ public class ContiguousAllocationFileSystem implements FileSystem {
              i < fileInfo.getStartingBlockIndex() + fileInfo.getFileSize(); i++) {
             directory[i] = 0;
         }
+        fileInfo.setFileSize(fileInfo.getFileSize() - shrinkingBlocks);
         emptyBlockCount += shrinkingBlocks;
         return true;
     }

@@ -198,7 +198,6 @@ public class LinkedAllocationFileSystem implements FileSystem {
                     numberOfNewChunks++;
                     chunkStartIndex = i;
                     // if latest chunk is not modified and this is the first new chunk, store its starting index to use in the case of rollback
-                    // TODO: check this IDE tells me that this is always wrong
                     if (chunkToRemoveStartingIndex == -1 && latestChunkInitialSize == -1) {
                         chunkToRemoveStartingIndex = i;
                     }
@@ -231,6 +230,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
             // put -1 to the last index of last chunk
             directory[i > 0 ? i : lastIndexOfTheLatestChunk] = -1;
             emptyBlockCount -= extensionBlocks + 2 * numberOfNewChunks;
+            fileInfo.setFileSize(fileInfo.getFileSize() + extensionBlocks);
             return true;
         } else {
             // rollback changes in the directory
@@ -271,8 +271,44 @@ public class LinkedAllocationFileSystem implements FileSystem {
 
     @Override
     public boolean shrink(int fileId, int shrinkingBlocks) {
-        emptyBlockCount += shrinkingBlocks;
+        FileEntry fileInfo = directoryTable.get(fileId);
 
-        return false;
+        if (fileInfo == null) {
+            return false;
+        }
+
+        int newSizeInBlocks = fileInfo.getFileSize() - shrinkingBlocks;
+        int currentIndex = fileInfo.getStartingBlockIndex();
+        // jump to the chunk that will be the new last chunk
+        int blocksJumped = 0;
+        while (blocksJumped + directory[currentIndex] < newSizeInBlocks) {
+            blocksJumped = directory[currentIndex];
+            currentIndex = directory[currentIndex + directory[currentIndex] + 1];
+        }
+
+        int lastChunkNewSize = newSizeInBlocks - blocksJumped;
+        int lastChunkOldSize = directory[currentIndex];
+        int nextChunk = directory[currentIndex + lastChunkOldSize + 1];
+        directory[currentIndex] = lastChunkNewSize;
+        directory[currentIndex + lastChunkNewSize + 1] = -1;
+        for (int i = currentIndex + lastChunkNewSize + 2; i < currentIndex + lastChunkOldSize + 2; i++) {
+            directory[i] = 0;
+        }
+
+        // delete all next chunks
+        while (nextChunk != -1) {
+            int size = directory[nextChunk] + 1;
+            // we will remove chunk size amount of blocks
+            for (int j = nextChunk; j < nextChunk + size; j++) {
+                directory[j] = 0;
+            }
+            int nextChunkToRemoveStart = directory[nextChunk + size];
+            directory[nextChunk + size] = 0;
+            nextChunk = nextChunkToRemoveStart;
+        }
+
+        emptyBlockCount += shrinkingBlocks;
+        fileInfo.setFileSize(newSizeInBlocks);
+        return true;
     }
 }
