@@ -45,7 +45,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
         int lastIndexOfTheLatestChunk = -1;
         int i = 0;
         while (i < directory.length && blocksStored < correspondingBlockSize) {
-            if (directory[i] == 0) {
+            if (directory[i + 1] == 0) {
                 // starting a new chunk
                 if (!currentlyOnChunk) {
                     if (numberOfChunks != 0) {
@@ -75,22 +75,19 @@ public class LinkedAllocationFileSystem implements FileSystem {
                 // we hit a chunk
                 if (currentlyOnChunk) {
                     // we can finish current chunk and jump to the end of this chunk we just hit
-                    if (chunkSize <= 1) {
+                    if (chunkSize < 1) {
                         // there is not enough space to store any data, just delete this chunk and continue as if it never got created
                         for (int j = chunkStartIndex; j < i; j++) {
                             directory[j] = 0;
                         }
-                        blocksStored -= chunkSize;
                         numberOfChunks--;
                     } else {
-                        lastIndexOfTheLatestChunk = i - 1;
-                        chunkSize--;
-                        blocksStored--;
+                        lastIndexOfTheLatestChunk = i;
                         directory[chunkStartIndex] = chunkSize;
                     }
                 }
                 currentlyOnChunk = false;
-                i += directory[i] + 2;
+                i += directory[i + 1] + 3;
             }
         }
 
@@ -211,7 +208,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
         int chunkSize = 0;
 
         while (i < directory.length && blocksExtended < extensionBlocks) {
-            if (directory[i] == 0) {
+            if (directory[i + 1] == 0) {
                 // starting a new chunk
                 if (!currentlyOnChunk) {
                     // link latest chunk to this new chunk
@@ -239,7 +236,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
                 // we hit a chunk
                 if (currentlyOnChunk) {
                     // we can finish current chunk and jump to the end of this chunk we just hit
-                    if (chunkSize <= 1) {
+                    if (chunkSize < 1) {
                         // there is not enough space to store any data, just delete this chunk and continue as if it never got created
                         for (int j = chunkStartIndex; j < i; j++) {
                             directory[j] = 0;
@@ -247,14 +244,12 @@ public class LinkedAllocationFileSystem implements FileSystem {
                         blocksExtended -= chunkSize;
                         numberOfNewChunks--;
                     } else {
-                        lastIndexOfTheLatestChunk = i - 1;
-                        chunkSize--;
-                        blocksExtended--;
+                        lastIndexOfTheLatestChunk = i;
                         directory[chunkStartIndex] = chunkSize;
                     }
                 }
                 currentlyOnChunk = false;
-                i += directory[i] + 2;
+                i += directory[i + 1] + 3;
             }
         }
 
@@ -269,6 +264,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
                 directory[chunkStartIndex] = chunkSize;
             }
             // put -1 to the last index of last chunk
+            // TODO: there is bug here
             directory[i > 0 ? i : lastIndexOfTheLatestChunk] = -1;
             emptyBlockCount -= extensionBlocks + 2 * numberOfNewChunks;
             fileInfo.setFileSize(fileInfo.getFileSize() + extensionBlocks);
@@ -357,10 +353,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
         return true;
     }
 
-    public int[] getDirectory() {
-        return directory;
-    }
-
+    // utility function to validate all files are stored correctly
     public void checkAllChunks() {
         List<FileEntry> fileEntryList = this.directoryTable.values().stream().filter(fe -> {
                     int currentSize = 0;

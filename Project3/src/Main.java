@@ -11,7 +11,7 @@ public class Main {
 
     public static void main(String[] args) {
         // write your code here
-        String fileName = "input_1024_200_5_9_9.txt";
+        String fileName = "input_1024_200_9_0_9.txt";
         // "input_8_600_5_5_0.txt";
         // "input_1024_200_5_9_9.txt";
         // "input_1024_200_9_0_0.txt";
@@ -35,10 +35,14 @@ public class Main {
 
         List<Result> results = new ArrayList<>();
 
-        for (int i = -5; i < 10; i++) {
+        for (int i = -6; i < 10; i++) {
             FileSystem fs;
 
-            if (i < 5) {
+            if (i < -3) {
+                fs = new LinkedAllocationFileSystem(DIRECTORY_SIZE, blockSize);
+            } else if (i < 0) {
+                fs = new ContiguousAllocationFileSystem(DIRECTORY_SIZE, blockSize);
+            } else if (i < 5) {
                 fs = new LinkedAllocationFileSystem(DIRECTORY_SIZE, blockSize);
             } else {
                 fs = new ContiguousAllocationFileSystem(DIRECTORY_SIZE, blockSize);
@@ -50,14 +54,14 @@ public class Main {
             int rejectedShrinks = 0;
             final long startTime = System.nanoTime();
             for (Command cmd : commandList) {
-                System.out.println(cmd);
+                // System.out.println(cmd);
                 switch (cmd.getCommand()) {
                     case "c":
                         if (fs.createFile(fileId, cmd.getArgument1())) {
                             fileId++;
                         } else {
                             rejectedCreations++;
-                            System.out.println("Rejected create");
+                            // System.out.println("Rejected create");
                         }
                         break;
                     case "a":
@@ -66,7 +70,7 @@ public class Main {
                     case "e":
                         if (!fs.extend(cmd.getArgument1(), cmd.getArgument2())) {
                             rejectedExtensions++;
-                            System.out.println("Rejected extension");
+                            //System.out.println("Rejected extension");
                         }
                         break;
                     case "sh":
@@ -76,9 +80,6 @@ public class Main {
                         break;
                     default:
                         System.err.println("Unknown command " + cmd.getCommand());
-                }
-                if (fs instanceof LinkedAllocationFileSystem) {
-                    ((LinkedAllocationFileSystem) fs).checkAllChunks();
                 }
             }
             final long duration = System.nanoTime() - startTime;

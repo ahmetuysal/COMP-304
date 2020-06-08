@@ -156,7 +156,7 @@ public class ContiguousAllocationFileSystem implements FileSystem {
     public boolean shrink(int fileId, int shrinkingBlocks) {
         FileEntry fileInfo = directoryTable.get(fileId);
 
-        if (fileInfo == null || fileInfo.getFileSize() <= shrinkingBlocks) {
+        if (shrinkingBlocks <= 0 || fileInfo == null || fileInfo.getFileSize() <= shrinkingBlocks) {
             return false;
         }
 
@@ -174,22 +174,17 @@ public class ContiguousAllocationFileSystem implements FileSystem {
      */
     private void applyCompaction() {
         final int[] currentIndex = {0};
-        try {
-            directoryTable.values().stream()
-                    // iterate files in ascending starting block index order
-                    .sorted(Comparator.comparingInt(FileEntry::getStartingBlockIndex))
-                    .forEachOrdered(fe -> {
-                        for (int i = 0; i < fe.getFileSize(); i++) {
-                            // move the file block by block
-                            directory[currentIndex[0] + i] = directory[fe.getStartingBlockIndex() + i];
-                        }
-                        fe.setStartingBlockIndex(currentIndex[0]);
-                        currentIndex[0] += fe.getFileSize();
-                    });
-        } catch (IndexOutOfBoundsException e) {
-            System.out.println("H");
-        }
-
+        directoryTable.values().stream()
+                // iterate files in ascending starting block index order
+                .sorted(Comparator.comparingInt(FileEntry::getStartingBlockIndex))
+                .forEachOrdered(fe -> {
+                    for (int i = 0; i < fe.getFileSize(); i++) {
+                        // move the file block by block
+                        directory[currentIndex[0] + i] = directory[fe.getStartingBlockIndex() + i];
+                    }
+                    fe.setStartingBlockIndex(currentIndex[0]);
+                    currentIndex[0] += fe.getFileSize();
+                });
     }
 
     /**
