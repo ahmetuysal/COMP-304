@@ -64,7 +64,7 @@ public class ContiguousAllocationFileSystem implements FileSystem {
 
     @Override
     public boolean extend(int fileId, int extensionBlocks) {
-        if (emptyBlockCount < extensionBlocks)
+        if (extensionBlocks < 0 || emptyBlockCount < extensionBlocks)
             return false;
 
         FileEntry fileInfo = directoryTable.get(fileId);
@@ -148,7 +148,6 @@ public class ContiguousAllocationFileSystem implements FileSystem {
                 }
             }
         }
-        fileInfo.setFileSize(fileInfo.getFileSize() - extensionBlocks);
         emptyBlockCount -= extensionBlocks;
         return true;
     }
@@ -160,7 +159,6 @@ public class ContiguousAllocationFileSystem implements FileSystem {
         if (fileInfo == null || fileInfo.getFileSize() <= shrinkingBlocks) {
             return false;
         }
-
 
         for (int i = fileInfo.getStartingBlockIndex() + fileInfo.getFileSize() - shrinkingBlocks;
              i < fileInfo.getStartingBlockIndex() + fileInfo.getFileSize(); i++) {
@@ -176,17 +174,22 @@ public class ContiguousAllocationFileSystem implements FileSystem {
      */
     private void applyCompaction() {
         final int[] currentIndex = {0};
-        directoryTable.values().stream()
-                // iterate files in ascending starting block index order
-                .sorted(Comparator.comparingInt(FileEntry::getStartingBlockIndex))
-                .forEachOrdered(fe -> {
-                    for (int i = 0; i < fe.getFileSize(); i++) {
-                        // move the file block by block
-                        directory[currentIndex[0] + i] = directory[fe.getStartingBlockIndex() + i];
-                    }
-                    fe.setStartingBlockIndex(currentIndex[0]);
-                    currentIndex[0] += fe.getFileSize();
-                });
+        try {
+            directoryTable.values().stream()
+                    // iterate files in ascending starting block index order
+                    .sorted(Comparator.comparingInt(FileEntry::getStartingBlockIndex))
+                    .forEachOrdered(fe -> {
+                        for (int i = 0; i < fe.getFileSize(); i++) {
+                            // move the file block by block
+                            directory[currentIndex[0] + i] = directory[fe.getStartingBlockIndex() + i];
+                        }
+                        fe.setStartingBlockIndex(currentIndex[0]);
+                        currentIndex[0] += fe.getFileSize();
+                    });
+        } catch (IndexOutOfBoundsException e) {
+            System.out.println("H");
+        }
+
     }
 
     /**
@@ -221,6 +224,9 @@ public class ContiguousAllocationFileSystem implements FileSystem {
      * @return <code>true</code> if area is available (empty), <code>false</code> otherwise.
      */
     private boolean isAreaAvailable(int startingIndex, int length) {
+        if (startingIndex < 0 || startingIndex + length > directory.length) {
+            return false;
+        }
         for (int i = startingIndex; i < startingIndex + length; i++) {
             if (directory[i] != 0)
                 return false;

@@ -32,4 +32,14 @@ public class FileEntry {
     public void setFileSize(int fileSize) {
         this.fileSize = fileSize;
     }
+
+
+    @Override
+    public String toString() {
+        return "FileEntry{" +
+                "fileId=" + fileId +
+                ", startingBlockIndex=" + startingBlockIndex +
+                ", fileSize=" + fileSize +
+                '}';
+    }
 }

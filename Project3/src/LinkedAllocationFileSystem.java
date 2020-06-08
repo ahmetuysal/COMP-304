@@ -1,6 +1,8 @@
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
  * @author Ahmet Uysal @ahmetuysal
@@ -36,6 +38,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
         FileEntry fileInfo = null;
         int blocksStored = 0;
         int chunkStartIndex = -1;
+        boolean currentlyOnChunk = false;
         int chunkSize = 0;
         int numberOfChunks = 0;
         // this is required since we will need to link each chunk to consequent chunk
@@ -44,12 +47,8 @@ public class LinkedAllocationFileSystem implements FileSystem {
         while (i < directory.length && blocksStored < correspondingBlockSize) {
             if (directory[i] == 0) {
                 // starting a new chunk
-                if (chunkStartIndex == -1) {
-                    if (numberOfChunks == 0) {
-                        // this is the first chunk, create the file entry
-                        // this entry will also be used to rollback if file creation fails
-                        fileInfo = new FileEntry(fileId, i, correspondingBlockSize);
-                    } else {
+                if (!currentlyOnChunk) {
+                    if (numberOfChunks != 0) {
                         // link latest chunk to this new chunk
                         directory[lastIndexOfTheLatestChunk] = i;
                     }
@@ -57,30 +56,54 @@ public class LinkedAllocationFileSystem implements FileSystem {
                     // we will write amount of data stored in the chunk to this index when the chunk ends
                     numberOfChunks++;
                     chunkStartIndex = i;
+                    currentlyOnChunk = true;
+                    chunkSize = 0;
                 }
                 // continue writing current chunk
                 else {
                     directory[i] = 1 + randomGenerator.nextInt(Integer.MAX_VALUE);
                     blocksStored++;
                     chunkSize++;
+                    if (numberOfChunks == 1 && chunkSize == 2) {
+                        // this is the first chunk, create the file entry
+                        // this entry will also be used to rollback if file creation fails
+                        fileInfo = new FileEntry(fileId, i - 2, correspondingBlockSize);
+                    }
                 }
                 i++;
             } else {
                 // we hit a chunk
-                // we can finish current chunk and jump to the end of this chunk we just hit
-                lastIndexOfTheLatestChunk = i - 1;
-                chunkSize--;
-                blocksStored--;
-                directory[chunkStartIndex] = chunkSize;
-                chunkStartIndex = -1;
+                if (currentlyOnChunk) {
+                    // we can finish current chunk and jump to the end of this chunk we just hit
+                    if (chunkSize <= 1) {
+                        // there is not enough space to store any data, just delete this chunk and continue as if it never got created
+                        for (int j = chunkStartIndex; j < i; j++) {
+                            directory[j] = 0;
+                        }
+                        blocksStored -= chunkSize;
+                        numberOfChunks--;
+                    } else {
+                        lastIndexOfTheLatestChunk = i - 1;
+                        chunkSize--;
+                        blocksStored--;
+                        directory[chunkStartIndex] = chunkSize;
+                    }
+                }
+                currentlyOnChunk = false;
                 i += directory[i] + 2;
             }
         }
+
+        if (blocksStored == 0) {
+            return false;
+        }
+
 
         if (blocksStored == correspondingBlockSize && i < directory.length) {
             // file is successfully stored
             // put chunk size to last chunk
             directory[chunkStartIndex] = chunkSize;
+
             // put -1 to the last index of last chunk (which is i)
             directory[i] = -1;
             emptyBlockCount -= (correspondingBlockSize + 2 * (numberOfChunks));
@@ -117,15 +140,14 @@ public class LinkedAllocationFileSystem implements FileSystem {
         FileEntry fileInfo = directoryTable.get(fileId);
 
         int correspondingBlockSize = (int) Math.floor((double) byteOffset / blockSize);
-
         // check for file size boundary
         if (fileInfo == null || correspondingBlockSize >= fileInfo.getFileSize()) {
             return -1;
         }
 
         int currentOffset = 0;
-        int currentIndex = fileInfo.getStartingBlockIndex();
 
+        int currentIndex = fileInfo.getStartingBlockIndex();
         // jump to next chunk until we are in the correct chunk
         while (currentOffset + directory[currentIndex] < correspondingBlockSize) {
             currentOffset += directory[currentIndex];
@@ -139,7 +161,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
 
     @Override
     public boolean extend(int fileId, int extensionBlocks) {
-        if (emptyBlockCount < extensionBlocks)
+        if (extensionBlocks < 0 || emptyBlockCount < extensionBlocks)
             return false;
 
         FileEntry fileInfo = directoryTable.get(fileId);
@@ -155,7 +177,7 @@ public class LinkedAllocationFileSystem implements FileSystem {
         }
 
         int blocksExtended = 0;
-        int lastIndexOfTheLatestChunk = -1;
+        int lastIndexOfTheLatestChunk = currentIndex + directory[currentIndex] + 1;
 
         // these two variables will be used in the case of rollback (extension fails due to storage)
         int chunkToRemoveStartingIndex = -1;
@@ -185,40 +207,59 @@ public class LinkedAllocationFileSystem implements FileSystem {
         // this part of extension algorithm is almost identical to create
         int i = 0;
         int chunkStartIndex = -1;
+        boolean currentlyOnChunk = false;
         int chunkSize = 0;
 
         while (i < directory.length && blocksExtended < extensionBlocks) {
             if (directory[i] == 0) {
                 // starting a new chunk
-                if (chunkStartIndex == -1) {
+                if (!currentlyOnChunk) {
                     // link latest chunk to this new chunk
                     directory[lastIndexOfTheLatestChunk] = i;
                     // this index (directory[i]) is left as it is for now
                     // we will write amount of data stored in the chunk to this index when the chunk ends
+
                     numberOfNewChunks++;
                     chunkStartIndex = i;
-                    // if latest chunk is not modified and this is the first new chunk, store its starting index to use in the case of rollback
-                    if (chunkToRemoveStartingIndex == -1 && latestChunkInitialSize == -1) {
-                        chunkToRemoveStartingIndex = i;
-                    }
+                    currentlyOnChunk = true;
+                    chunkSize = 0;
                 }
                 // continue writing current chunk
                 else {
                     directory[i] = 1 + randomGenerator.nextInt(Integer.MAX_VALUE);
                     blocksExtended++;
                     chunkSize++;
+                    // if latest chunk is not modified and this is the first new chunk, store its starting index to use in the case of rollback
+                    if (chunkToRemoveStartingIndex == -1 && latestChunkInitialSize == -1 && chunkSize == 2) {
+                        chunkToRemoveStartingIndex = i - 2;
+                    }
                 }
                 i++;
             } else {
                 // we hit a chunk
-                // we can finish current chunk and jump to the end of this chunk we just hit
-                lastIndexOfTheLatestChunk = i - 1;
-                chunkSize--;
-                blocksExtended--;
-                directory[chunkStartIndex] = chunkSize;
-                chunkStartIndex = -1;
+                if (currentlyOnChunk) {
+                    // we can finish current chunk and jump to the end of this chunk we just hit
+                    if (chunkSize <= 1) {
+                        // there is not enough space to store any data, just delete this chunk and continue as if it never got created
+                        for (int j = chunkStartIndex; j < i; j++) {
+                            directory[j] = 0;
+                        }
+                        blocksExtended -= chunkSize;
+                        numberOfNewChunks--;
+                    } else {
+                        lastIndexOfTheLatestChunk = i - 1;
+                        chunkSize--;
+                        blocksExtended--;
+                        directory[chunkStartIndex] = chunkSize;
+                    }
+                }
+                currentlyOnChunk = false;
                 i += directory[i] + 2;
             }
+        }
+
+        if (blocksExtended == 0) {
+            return false;
         }
 
         if (blocksExtended == extensionBlocks && i < directory.length) {
@@ -273,16 +314,17 @@ public class LinkedAllocationFileSystem implements FileSystem {
     public boolean shrink(int fileId, int shrinkingBlocks) {
         FileEntry fileInfo = directoryTable.get(fileId);
 
-        if (fileInfo == null) {
+        if (shrinkingBlocks < 0 || fileInfo == null || fileInfo.getFileSize() <= shrinkingBlocks) {
             return false;
         }
 
         int newSizeInBlocks = fileInfo.getFileSize() - shrinkingBlocks;
+
         int currentIndex = fileInfo.getStartingBlockIndex();
         // jump to the chunk that will be the new last chunk
         int blocksJumped = 0;
         while (blocksJumped + directory[currentIndex] < newSizeInBlocks) {
-            blocksJumped = directory[currentIndex];
+            blocksJumped += directory[currentIndex];
             currentIndex = directory[currentIndex + directory[currentIndex] + 1];
         }
 
@@ -291,12 +333,15 @@ public class LinkedAllocationFileSystem implements FileSystem {
         int nextChunk = directory[currentIndex + lastChunkOldSize + 1];
         directory[currentIndex] = lastChunkNewSize;
         directory[currentIndex + lastChunkNewSize + 1] = -1;
-        for (int i = currentIndex + lastChunkNewSize + 2; i < currentIndex + lastChunkOldSize + 2; i++) {
+        for (int i = currentIndex + lastChunkNewSize + 2; i <= currentIndex + lastChunkOldSize + 1; i++) {
             directory[i] = 0;
         }
 
         // delete all next chunks
+        int deletedChunks = 0;
+
         while (nextChunk != -1) {
+            deletedChunks++;
             int size = directory[nextChunk] + 1;
             // we will remove chunk size amount of blocks
             for (int j = nextChunk; j < nextChunk + size; j++) {
@@ -307,8 +352,31 @@ public class LinkedAllocationFileSystem implements FileSystem {
             nextChunk = nextChunkToRemoveStart;
         }
 
-        emptyBlockCount += shrinkingBlocks;
+        emptyBlockCount += shrinkingBlocks + 2 * deletedChunks;
         fileInfo.setFileSize(newSizeInBlocks);
         return true;
     }
+
+    public int[] getDirectory() {
+        return directory;
+    }
+
+    public void checkAllChunks() {
+        List<FileEntry> fileEntryList = this.directoryTable.values().stream().filter(fe -> {
+                    int currentSize = 0;
+                    int currentIndex = fe.getStartingBlockIndex();
+                    // jump to next chunk until we are in the correct chunk
+                    while (currentIndex != -1) {
+                        currentSize += directory[currentIndex];
+                        currentIndex = directory[currentIndex + directory[currentIndex] + 1];
+                    }
+                    return currentSize != fe.getFileSize();
+                }
+        ).collect(Collectors.toList());
+
+        if (!fileEntryList.isEmpty()) {
+            throw new RuntimeException(fileEntryList.toString());
+        }
+    }
+
 }
